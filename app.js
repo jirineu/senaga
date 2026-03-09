@@ -12,10 +12,22 @@ const app = {
 
     
 
-    persistir() {
+persistir() {
+    // 1. Salva local imediatamente
     localStorage.setItem('barber_data', JSON.stringify(this.dados));
-},
 
+    // 2. Cancela o salvamento anterior se um novo começar rápido demais
+    if (this.timerSalvar) clearTimeout(this.timerSalvar);
+
+    // 3. Espera 2 segundos de "paz" para enviar para o GitHub
+    this.timerSalvar = setTimeout(() => {
+        if (githubDB.token && githubDB.owner) {
+            githubDB.salvar(this.dados).then(sucesso => {
+                if (sucesso) console.log("☁️ Backup Cloud OK");
+            });
+        }
+    }, 2000); 
+},
     renderView(view, btn) {
         if (view === 'add-agenda') {
             this.prepararNovoAgendamento();
@@ -56,12 +68,11 @@ atualizarDashPorPeriodo(periodo) {
     if (!this.dados.historico) this.dados.historico = [];
 
     const agora = new Date();
-    const hojeString = agora.toISOString().split('T')[0]; // Formato YYYY-MM-DD
-    
-    // Criar datas de início sem interferência de fuso horário
+    const hojeString = agora.toISOString().split('T')[0];
     let inicio = new Date();
     inicio.setHours(0, 0, 0, 0);
 
+    // Ajuste dos filtros de data
     if (periodo === 'dia') {
         inicio = new Date(hojeString + 'T00:00:00');
     } else if (periodo === 'semana') {
@@ -70,102 +81,88 @@ atualizarDashPorPeriodo(periodo) {
         inicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
     } else if (periodo === 'ano') {
         inicio = new Date(agora.getFullYear(), 0, 1);
+    } else if (periodo === 'tudo') {
+        inicio = new Date(0); // Data zero (1970) para pegar tudo
     }
 
     const filtrados = this.dados.historico.filter(h => {
-        // Pega a data de conclusão ou a data comum
         const dataHString = h.dataConclusao || h.data;
         if (!dataHString) return false;
 
-        // Se for filtro de dia, comparação direta de texto (mais seguro)
-        if (periodo === 'dia') {
-            return dataHString === hojeString;
-        }
+        if (periodo === 'dia') return dataHString === hojeString;
+        if (periodo === 'tudo') return true;
 
-        // Para períodos maiores, comparamos o objeto Date
         const dataH = new Date(dataHString + 'T12:00:00');
-        return dataH >= inicio && dataH <= agora;
+        return dataH >= inicio;
     });
 
-    // Cálculos garantindo que os números sejam lidos corretamente
+    // Cálculos Financeiros
     const bruto = filtrados.reduce((acc, curr) => acc + (parseFloat(curr.valorBruto || curr.valor || 0)), 0);
     const liquido = filtrados.reduce((acc, curr) => acc + (parseFloat(curr.valorLiquido || 0)), 0);
 
-    console.log(`Filtrados para ${periodo}:`, filtrados.length, "itens"); // Debug no console
-    
-    this.atualizarInterfaceDash(periodo === 'dia' ? 'Hoje' : periodo.charAt(0).toUpperCase() + periodo.slice(1), bruto, liquido, filtrados);
+    // Renderiza a interface enviando o período para os labels
+    this.atualizarInterfaceDash(periodo, bruto, liquido, filtrados);
 },
 // Função auxiliar para evitar repetição de código
 atualizarInterfaceDash(texto, bruto, liquido, listaFiltrada) {
-    // 1. Elementos da Interface
     const elBruto = document.getElementById('dash-bruto');
     const elLiquido = document.getElementById('dash-liquido');
     const elTxt = document.getElementById('dash-periodo-txt');
     const elTotalCortes = document.getElementById('dash-cortes-total');
-    const elMelhorServ = document.getElementById('dash-servico-top');
     const elMelhorPres = document.getElementById('dash-barbeiro-top');
-    const elMelhorCli = document.getElementById('dash-cliente-top');
+    const elClientePeriodo = document.getElementById('dash-cliente-top');
+    const elClienteGeral = document.getElementById('dash-cliente-permanente');
 
-    // 2. Contadores para o Ranking
-    const contagem = { servicos: {}, prestadores: {}, clientes: {} };
+    // 1. Contadores apenas para o período selecionado
+    const contagemPeriodo = { prestadores: {}, clientes: {} };
     let totalCortesReais = 0;
 
-    // 3. FILTRAGEM: Pegar APENAS o que é serviço
     listaFiltrada.forEach(item => {
-        // Um atendimento real OBRIGATORIAMENTE tem:
-        // - Um serviço definido
-        // - Um valor bruto maior que zero
-        // - Não pode ter "AJUSTE" ou "PAGAMENTO" no nome do cliente
-        
-        const servico = item.servico || item.nomeServico;
         const cliente = item.cliente || "";
-        const profissional = item.prestador || item.barbeiro || item.nomePrestador;
+        const profissional = item.prestador || item.barbeiro;
         const valor = parseFloat(item.valorBruto || item.valor || 0);
 
-        const ehAtendimentoReal = servico && 
-                                  servico !== "---" && 
-                                  valor > 0 && 
-                                  !cliente.toUpperCase().includes("AJUSTE") && 
-                                  !cliente.toUpperCase().includes("PAGAMENTO");
-
-        if (ehAtendimentoReal) {
+        // Considera apenas serviços reais (ignora ajustes/pagamentos)
+        if (valor > 0 && !cliente.toUpperCase().includes("AJUSTE")) {
             totalCortesReais++;
-            
-            // Soma para o Ranking
-            contagem.servicos[servico] = (contagem.servicos[servico] || 0) + 1;
-            contagem.prestadores[profissional] = (contagem.prestadores[profissional] || 0) + 1;
-            contagem.clientes[cliente] = (contagem.clientes[cliente] || 0) + 1;
+            if (profissional) contagemPeriodo.prestadores[profissional] = (contagemPeriodo.prestadores[profissional] || 0) + 1;
+            if (cliente) contagemPeriodo.clientes[cliente] = (contagemPeriodo.clientes[cliente] || 0) + 1;
         }
     });
 
-    // 4. Atualiza os Valores Financeiros (Geral do período)
-    if (elBruto) elBruto.innerText = `R$ ${bruto.toFixed(2)}`;
-    if (elLiquido) elLiquido.innerText = `R$ ${liquido.toFixed(2)}`;
-    if (elTxt) elTxt.innerText = texto;
-    if (elTotalCortes) elTotalCortes.innerText = totalCortesReais;
+    // 2. Ranking Permanente (Varre TODO o histórico do sistema)
+    const contagemGeral = {};
+    this.dados.historico.forEach(item => {
+        const cli = item.cliente || "";
+        if (cli && !cli.toUpperCase().includes("AJUSTE")) {
+            contagemGeral[cli] = (contagemGeral[cli] || 0) + 1;
+        }
+    });
 
-    // 5. Lógica para descobrir o "Melhor"
     const getMelhor = (obj) => {
         const entries = Object.entries(obj);
-        if (entries.length === 0) return "-";
-        // Ordena por quantidade (quem aparece mais vezes)
-        return entries.sort((a, b) => b[1] - a[1])[0][0];
+        return entries.length ? entries.sort((a, b) => b[1] - a[1])[0][0] : "-";
     };
 
-    // 6. Alimenta os Recordes com os vencedores
-    if (elMelhorServ) elMelhorServ.innerText = getMelhor(contagem.servicos);
-    if (elMelhorPres) elMelhorPres.innerText = getMelhor(contagem.prestadores);
-    if (elMelhorCli) elMelhorCli.innerText = getMelhor(contagem.clientes);
+    // 3. Atualiza os textos na tela
+    if (elBruto) elBruto.innerText = `R$ ${bruto.toFixed(2)}`;
+    if (elLiquido) elLiquido.innerText = `R$ ${liquido.toFixed(2)}`;
+    if (elTxt) elTxt.innerText = texto === 'Tudo' ? 'Total' : texto;
+    if (elTotalCortes) elTotalCortes.innerText = totalCortesReais;
+    
+    // Melhores do Período (Mudam conforme o botão)
+    if (elMelhorPres) elMelhorPres.innerText = getMelhor(contagemPeriodo.prestadores);
+    if (elClientePeriodo) elClientePeriodo.innerText = getMelhor(contagemPeriodo.clientes);
 
-    // 7. Estilo dos botões (Seleção Única)
+    // Melhor de Sempre (Fixo)
+    if (elClienteGeral) elClienteGeral.innerText = getMelhor(contagemGeral);
+
+    // 4. Estilo dos botões (destaque o selecionado)
     document.querySelectorAll('#view-dash .btn-small').forEach(btn => {
-        const tBtn = btn.innerText.trim().toLowerCase();
-        const tAlvo = texto.toLowerCase();
-        const active = (tAlvo === "hoje" && tBtn === "dia") || (tBtn === tAlvo);
-        
+        const tBtn = btn.innerText.toLowerCase();
+        const active = (texto.toLowerCase() === 'hoje' && tBtn === 'dia') || (tBtn === texto.toLowerCase());
         btn.style.background = active ? 'var(--accent)' : '#333';
         btn.style.color = active ? 'black' : 'white';
-        btn.style.fontWeight = active ? 'bold' : 'normal';
     });
 },
     // --- GESTÃO DE HISTÓRICO ---
@@ -506,55 +503,66 @@ finalizarPagamento(id) {
 
     // --- LÓGICA DE ESTOQUE E CUSTO ---
     if (itemConcluido.produto) {
-        // Buscamos o produto no estoque para baixar a quantidade e capturar o preço de custo
         const pEstoque = this.dados.estoque.find(p => p.nome === itemConcluido.produto);
-        
         if (pEstoque) {
-            // Baixa no estoque (usando 'qtd' ou 'quantidade' conforme seu cadastro)
             if (pEstoque.qtd > 0) pEstoque.qtd -= 1;
             else if (pEstoque.quantidade > 0) pEstoque.quantidade -= 1;
-
-            // Captura o custo do produto para o cálculo financeiro
-            custoProdutoTotal = parseFloat(pEstoque.precoCusto) || 0;
+            custoProdutoTotal = parseFloat(pEstoque.precoCusto || 0);
         }
     }
 
+    // --- NOVA LÓGICA DE COMISSÃO DINÂMICA ---
     const funcionario = this.dados.prestadores.find(p => p.nome === itemConcluido.prestador);
-    const valorComissaoFixo = funcionario ? parseFloat(funcionario.comissao) : 0;
-    
     const valorBruto = parseFloat(itemConcluido.valor) || 0;
+    let valorComissaoCalculada = 0;
 
-    // --- NOVO CÁLCULO FINANCEIRO ---
-    // Valor Líquido = (Serviço + Venda Produto) - Comissão Barbeiro - Custo de Aquisição do Produto
-    const valorLiquido = valorBruto - valorComissaoFixo - custoProdutoTotal;
+    if (funcionario) {
+        const tipo = funcionario.tipo || 'fixo'; // Padrão 'fixo' para compatibilidade com antigos
+        const valorBaseComissao = parseFloat(funcionario.comissao) || 0;
+
+        if (tipo === 'porcentagem') {
+            // Calcula % sobre o valor bruto do serviço
+            valorComissaoCalculada = valorBruto * (valorBaseComissao / 100);
+        } else if (tipo === 'fixo') {
+            // Valor fixo em Reais
+            valorComissaoCalculada = valorBaseComissao;
+        } else if (tipo === 'dono') {
+            // Se for dono, a comissão é zero (lucro total para a casa)
+            valorComissaoCalculada = 0;
+        }
+    }
+
+    // --- CÁLCULO FINANCEIRO FINAL ---
+    // Lucro Real = O que o cliente pagou - Comissão - Custo do produto usado
+    const valorLiquido = valorBruto - valorComissaoCalculada - custoProdutoTotal;
 
     // Atualiza o Caixa da Casa
     if (typeof this.dados.caixa !== 'number') this.dados.caixa = 0;
     this.dados.caixa += valorLiquido;
 
-    // Salva no Histórico com os novos detalhes
+    // Salva no Histórico com os detalhes atualizados
     if (!this.dados.historico) this.dados.historico = [];
     this.dados.historico.push({
         ...itemConcluido,
-        valorBruto: valorBruto,           // Total que o cliente pagou
-        valorComissao: valorComissaoFixo, // Parte do barbeiro
-        valorCustoItem: custoProdutoTotal, // O que você pagou no produto (custo)
-        valorLiquido: valorLiquido,       // O lucro real que sobrou no seu bolso
+        valorBruto: valorBruto,           
+        valorComissao: valorComissaoCalculada, 
+        valorCustoItem: custoProdutoTotal, 
+        valorLiquido: valorLiquido,       
         dataConclusao: new Date().toISOString().split('T')[0]
     });
     
-    // Finalização
+    // Finalização e Persistência
     this.dados.agenda.splice(index, 1);
     this.persistir();
     this.fecharModal();
     this.renderView('dash');
 
-    // Log para conferência no console
-    console.log(`Venda Finalizada: 
-        Bruto: R$ ${valorBruto} 
-        (-) Comissão: R$ ${valorComissaoFixo} 
-        (-) Custo Prod: R$ ${custoProdutoTotal} 
-        (=) Lucro Real: R$ ${valorLiquido}`);
+    // Log para conferência exata no console
+    console.log(`Venda Finalizada (${funcionario?.tipo || 'N/A'}): 
+        Bruto: R$ ${valorBruto.toFixed(2)} 
+        (-) Comissão: R$ ${valorComissaoCalculada.toFixed(2)} 
+        (-) Custo Prod: R$ ${custoProdutoTotal.toFixed(2)} 
+        (=) Lucro Real: R$ ${valorLiquido.toFixed(2)}`);
 },
     // --- FUNÇÕES DE APOIO (MANTIDAS) ---
 filtrarLista(tipo, termo) {
@@ -577,25 +585,36 @@ filtrarLista(tipo, termo) {
     }
 
     // --- BLOCO DE ESTOQUE ---
-    if (tipo === 'estoque') {
-        const container = document.getElementById('lista-estoque-content');
-        if (!container) return;
-        const filtrados = (this.dados.estoque || []).filter(e => e.nome.toLowerCase().includes(termoBusca));
-        container.innerHTML = filtrados.map(e => {
-            const venda = parseFloat(e.precoVenda || e.preco || 0);
-            const qtd = parseInt(e.qtd || 0);
-            return `
-                <div class="item-list" style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #333; border-left: 4px solid ${qtd > 0 ? '#28a745' : '#dc3545'}">
-                    <div>
-                        <strong>${e.nome}</strong><br>
-                        <small>Qtd: ${qtd} | Venda: R$ ${venda.toFixed(2)}</small>
-                    </div>
-                    <button class="btn-small" style="background:#444; color:white" onclick="app.prepararEdicaoEstoque(${e.id})">Editar</button>
+   // --- BLOCO DE ESTOQUE ATUALIZADO ---
+if (tipo === 'estoque') {
+    const container = document.getElementById('lista-estoque-content');
+    if (!container) return;
+    const filtrados = (this.dados.estoque || []).filter(e => e.nome.toLowerCase().includes(termoBusca));
+    
+    container.innerHTML = filtrados.map(e => {
+        const venda = parseFloat(e.precoVenda || e.preco || 0);
+        const qtd = parseInt(e.qtd || 0);
+        return `
+            <div class="item-list" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${qtd > 0 ? 'var(--success)' : 'var(--danger)'}">
+                <div style="flex:1">
+                    <strong style="color:white">${e.nome}</strong><br>
+                    <small style="color:#888">Qtd: <b style="color:${qtd > 0 ? 'white' : 'var(--danger)'}">${qtd}</b> | Venda: R$ ${venda.toFixed(2)}</small>
                 </div>
-            `;
-        }).join('') || '<p style="text-align:center; padding:10px; color:#666">Estoque vazio.</p>';
-    }
-
+                
+                <div style="display:flex; gap:8px; align-items:center">
+                    <button class="btn-small" style="background:#333; color:var(--danger); font-size:18px; width:35px" 
+                            onclick="app.ajustarQtdManual(${e.id}, -1)">−</button>
+                    
+                    <button class="btn-small" style="background:#333; color:var(--success); font-size:18px; width:35px" 
+                            onclick="app.ajustarQtdManual(${e.id}, 1)">+</button>
+                    
+                    <button class="btn-small" style="background:#444; color:white; margin-left:5px" 
+                            onclick="app.prepararEdicaoEstoque(${e.id})">✏️</button>
+                </div>
+            </div>
+        `;
+    }).join('') || '<p style="text-align:center; padding:10px; color:#666">Estoque vazio.</p>';
+}
     // --- BLOCO DE AGENDA (O que estava faltando) ---
    if (tipo === 'agenda') {
         const container = document.getElementById('lista-agenda-content');
@@ -624,6 +643,24 @@ filtrarLista(tipo, termo) {
                 </div>
             </div>
         `).join('') || `<p style="text-align:center; padding:20px; color:#666">Nenhum agendamento encontrado.</p>`;
+    }
+},
+ajustarQtdManual(id, mudanca) {
+    const item = this.dados.estoque.find(e => e.id === id);
+    if (item) {
+        const novaQtd = (parseInt(item.qtd) || 0) + mudanca;
+        
+        // Impede estoque negativo
+        if (novaQtd < 0) {
+            alert("A quantidade não pode ser inferior a zero.");
+            return;
+        }
+
+        item.qtd = novaQtd;
+        this.persistir(); // Salva no LocalStorage
+        
+        // Atualiza apenas a lista de estoque para refletir a mudança
+        this.filtrarLista('estoque', ''); 
     }
 },
 
@@ -657,68 +694,122 @@ filtrarLista(tipo, termo) {
 
 // Adicione estas funções dentro do objeto app:
 renderListaPrestadores() {
-        document.getElementById('lista-pre').innerHTML = [...this.dados.prestadores].reverse().map(p => `
-            <div class="item-list">
-                <div><strong>${p.nome}</strong><br><small>Comissão fixa: R$ ${p.comissao}</small></div>
-                <div style="display:flex; gap:5px">
-                    <button class="btn-small" style="background:var(--success); color:white" onclick="app.abrirAcerto(${p.id})">Acerto</button>
-                    <button class="btn-small" style="background:#444; color:white" onclick="app.prepararEdicaoPrestador(${p.id})">Editar</button>
+    const container = document.getElementById('lista-pre');
+    if (!container) return;
+
+    container.innerHTML = [...this.dados.prestadores].reverse().map(p => {
+        // Lógica para definir o que exibir na descrição
+        let infoRemuneracao = '';
+        const tipo = p.tipo || 'fixo'; // Garante compatibilidade com cadastros antigos
+
+        if (tipo === 'dono') {
+            infoRemuneracao = '<span style="color:var(--accent); font-weight:bold">Proprietário (Lucro Total)</span>';
+        } else if (tipo === 'porcentagem') {
+            infoRemuneracao = `Comissão: <b>${p.comissao}%</b> por serviço`;
+        } else {
+            infoRemuneracao = `Comissão fixa: <b>R$ ${parseFloat(p.comissao || 0).toFixed(2)}</b>`;
+        }
+
+        return `
+            <div class="item-list" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${tipo === 'dono' ? 'var(--accent)' : '#555'}">
+                <div style="flex:1">
+                    <strong style="color:white; font-size:16px">${p.nome}</strong><br>
+                    <small style="color:#888">${infoRemuneracao}</small>
+                </div>
+                <div style="display:flex; gap:8px">
+                    <button class="btn-small" style="background:var(--success); color:black; font-weight:bold" onclick="app.abrirAcerto(${p.id})">Acerto</button>
+                    <button class="btn-small" style="background:#333; color:white" onclick="app.prepararEdicaoPrestador(${p.id})">Editar</button>
                 </div>
             </div>
-        `).join('') || '<p style="text-align:center; padding:10px; color:#666">Nenhum profissional cadastrado.</p>';
-    },
+        `;
+    }).join('') || '<p style="text-align:center; padding:20px; color:#666">Nenhum profissional cadastrado.</p>';
+},
 
-    prepararEdicaoPrestador(id = null) {
-    const p = id ? this.dados.prestadores.find(x => x.id === id) : { nome: '', comissao: '' };
+   prepararEdicaoPrestador(id = null) {
+    // Busca o prestador ou cria um objeto padrão com tipo 'porcentagem'
+    const p = id ? this.dados.prestadores.find(x => x.id === id) : { nome: '', comissao: '', tipo: 'porcentagem' };
     
-    // Botão de excluir só aparece se for uma edição (tiver ID)
     const btnExcluir = id ? `<button class="btn-primary" style="background:var(--danger); color:white; margin-top:5px" onclick="app.excluirItem('prestadores', ${id})">Excluir Profissional</button>` : '';
 
     const html = `
         <input type="hidden" id="pre-id" value="${id || ''}">
+        
         <label style="font-size:12px; color:#888">Nome:</label>
-        <input type="text" id="pre-nome" value="${p.nome}">
-        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Comissão (R$):</label>
-        <input type="number" id="pre-comissao" value="${p.comissao}">
+        <input type="text" id="pre-nome" class="input-field" value="${p.nome}" placeholder="Ex: João">
+
+        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Tipo de Remuneração:</label>
+        <select id="pre-tipo" class="input-field" onchange="app.atualizarUIComissao()" style="width:100%; background:#222; color:white; border:1px solid #444; padding:12px; border-radius:10px; margin-bottom:10px">
+            <option value="porcentagem" ${p.tipo === 'porcentagem' ? 'selected' : ''}>Porcentagem (%)</option>
+            <option value="fixo" ${p.tipo === 'fixo' ? 'selected' : ''}>Valor Fixo (R$)</option>
+            <option value="dono" ${p.tipo === 'dono' ? 'selected' : ''}>Dono (Sem comissão)</option>
+        </select>
+
+        <div id="div-valor-comissao" style="display: ${p.tipo === 'dono' ? 'none' : 'block'}">
+            <label id="label-pre-comissao" style="font-size:12px; color:#888; margin-top:10px; display:block">
+                ${p.tipo === 'fixo' ? 'Comissão (R$):' : 'Comissão (%):'}
+            </label>
+            <input type="number" id="pre-comissao" class="input-field" value="${p.comissao}">
+        </div>
         
         <button class="btn-primary" style="margin-top:20px" onclick="app.salvarPrestador()">Salvar</button>
         ${btnExcluir}
         <button class="btn-primary" style="background:#333; margin-top:5px" onclick="app.fecharModal()">Cancelar</button>
     `;
+
     this.abrirModalForm(id ? "Editar Profissional" : "Novo Profissional", html);
 },
 
-    salvarPrestador() {
-        const id = document.getElementById('pre-id').value;
-        const nome = document.getElementById('pre-nome').value;
-        const comissao = parseFloat(document.getElementById('pre-comissao').value);
+// Função auxiliar para esconder/mostrar campos no modal
+atualizarUIComissao() {
+    const tipo = document.getElementById('pre-tipo').value;
+    const divValor = document.getElementById('div-valor-comissao');
+    const label = document.getElementById('label-pre-comissao');
 
-        if (!nome || isNaN(comissao)) {
-            alert("Preencha o nome e a comissão corretamente!");
-            return;
+    if (tipo === 'dono') {
+        divValor.style.display = 'none';
+    } else {
+        divValor.style.display = 'block';
+        label.innerText = tipo === 'fixo' ? 'Comissão (R$):' : 'Comissão (%):';
+    }
+},
+
+   salvarPrestador() {
+    const id = document.getElementById('pre-id').value;
+    const nome = document.getElementById('pre-nome').value;
+    const tipo = document.getElementById('pre-tipo').value; // Novo campo select
+    const inputComissao = document.getElementById('pre-comissao');
+    
+    // Para o tipo 'dono', a comissão é sempre 0. Para os outros, pegamos o valor do input.
+    const comissao = tipo === 'dono' ? 0 : parseFloat(inputComissao.value);
+
+    // Validação: Se não for dono, a comissão deve ser um número válido
+    if (!nome || (tipo !== 'dono' && isNaN(comissao))) {
+        alert("Preencha o nome e o valor da comissão corretamente!");
+        return;
+    }
+
+    const dadosPrestador = {
+        id: id ? parseInt(id) : Date.now(),
+        nome: nome,
+        tipo: tipo,
+        comissao: comissao
+    };
+
+    if (id) {
+        // Caso de Edição: Localiza pelo ID e atualiza o objeto inteiro
+        const index = this.dados.prestadores.findIndex(p => p.id == id);
+        if (index !== -1) {
+            this.dados.prestadores[index] = dadosPrestador;
         }
+    } else {
+        // Caso de Novo: Adiciona o novo objeto com o campo 'tipo'
+        this.dados.prestadores.push(dadosPrestador);
+    }
 
-        if (id) {
-            // Caso de Edição: Localiza pelo ID e atualiza
-            const index = this.dados.prestadores.findIndex(p => p.id == id);
-            if (index !== -1) {
-                this.dados.prestadores[index].nome = nome;
-                this.dados.prestadores[index].comissao = comissao;
-            }
-        } else {
-            // Caso de Novo: Cria um novo objeto com ID único
-            this.dados.prestadores.push({
-                id: Date.now(),
-                nome: nome,
-                comissao: comissao
-            });
-        }
-
-        this.persistir(); // Salva no LocalStorage
-        this.fecharModal(); // Fecha o formulário
-        this.renderListaPrestadores(); // Atualiza a lista na tela
-    },
-
+    this.persistir(); // Salva no LocalStorage
+    this.fecharModal(); // Fecha o formulário
+    this.renderView('prestadores'); // Chama a renderização da view de equipe
+},
     // --- DENTRO DO OBJETO APP ---
 
 abrirAcerto(id) {
@@ -980,6 +1071,108 @@ compartilharLink() {
 },
 };
 
+
+const githubDB = {
+    token: '',
+    owner: '',
+    repo: 'dados-barbearia', // Nome do repositório
+    path: 'banco.json',      // Nome do arquivo de dados
+
+    async salvar(dados) {
+        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${this.path}`;
+        
+        // 1. Precisamos do 'sha' (identificador) do arquivo se ele já existir
+        let sha = '';
+        try {
+            const res = await fetch(url, {
+                headers: { 'Authorization': `token ${this.token}` }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                sha = json.sha;
+            }
+        } catch (e) { console.log("Arquivo novo, sem SHA."); }
+
+        // 2. Converter dados para Base64 (exigência do GitHub)
+        const content = btoa(unescape(encodeURIComponent(JSON.stringify(dados, null, 2))));
+
+        // 3. Enviar para o GitHub
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${this.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message: "Atualizando banco de dados",
+                content: content,
+                sha: sha || undefined
+            })
+        });
+
+        return response.ok;
+    },
+
+    async carregar() {
+        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${this.path}`;
+        const res = await fetch(url, {
+            headers: { 'Authorization': `token ${this.token}` }
+        });
+
+        if (res.ok) {
+            const json = await res.json();
+            const content = decodeURIComponent(escape(atob(json.content)));
+            return JSON.parse(content);
+        }
+        return null;
+    }
+};
+
+const ghUserSalvo = localStorage.getItem('gh_user');
+const ghTokenSalvo = localStorage.getItem('gh_token');
+
+if (ghUserSalvo && ghTokenSalvo) {
+    githubDB.owner = ghUserSalvo;
+    githubDB.token = ghTokenSalvo;
+    console.log("☁️ GitHub Cloud: Credenciais carregadas do navegador.");
+}
+
+function configurarCloud() {
+    const user = prompt("Digite seu usuário do GitHub:");
+    const token = prompt("Cole seu Token do GitHub:");
+
+    if (user && token) {
+        githubDB.owner = user;
+        githubDB.token = token;
+        
+        // Salva as credenciais localmente para não pedir sempre
+        localStorage.setItem('gh_user', user);
+        localStorage.setItem('gh_token', token);
+        
+        alert("Cloud configurada! Sincronizando...");
+        sincronizarComGithub();
+    }
+}
+
+async function sincronizarComGithub() {
+    console.log("Buscando dados no GitHub...");
+    
+    const dadosNuvem = await githubDB.carregar();
+    
+    if (dadosNuvem) {
+        // Pergunta se deseja sobrescrever os dados locais (opcional, para segurança)
+        if (confirm("Dados encontrados na nuvem! Deseja carregar e substituir os dados atuais deste aparelho?")) {
+            app.dados = dadosNuvem;
+            localStorage.setItem('barber_data', JSON.stringify(app.dados));
+            app.renderView('dash');
+            alert("Sincronização concluída!");
+        }
+    } else {
+        // Se não houver arquivo lá, enviamos o local pela primeira vez
+        console.log("Nenhum dado encontrado na nuvem. Criando banco inicial...");
+        app.persistir(); 
+    }
+}
 window.onload = () => {
     // 1. Carregar dados do LocalStorage (Navegador)
     try {
