@@ -2,142 +2,282 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BarberPro Mobile</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BarberPro - Gestão de Sabores</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #121212;
+            --card: #1e1e1e;
+            --accent: #D4AF37;
+            --text: #ffffff;
+            --border: #333;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 15px;
+            padding-bottom: 80px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--accent);
+            margin-bottom: 20px;
+        }
+
+        h1 { color: var(--accent); font-size: 1.5rem; text-transform: uppercase; letter-spacing: 2px; }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 12px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .btn:active { background: var(--accent); color: var(--bg); }
+
+        #inventory-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .item-card {
+            background: var(--card);
+            border-left: 4px solid var(--border);
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-radius: 4px;
+            transition: 0.3s;
+        }
+
+        .item-card.active { border-left-color: var(--accent); }
+
+        .item-info { flex: 1; }
+        .item-name { font-weight: bold; font-size: 1rem; margin-bottom: 4px; }
+        .item-status { font-size: 0.75rem; color: #888; }
+
+        .qty-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .qty-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 5px;
+            border: 1px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qty-input {
+            width: 45px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        input[type="file"] { display: none; }
+    </style>
 </head>
 <body>
-    <header class="mobile-header">
-        <h1>Barber<span>Pro</span></h1>
+
+    <header>
+        <h1>Gestão de Pedidos</h1>
     </header>
 
-    <main class="container-mobile">
-<section id="view-dash" class="view-section">
-    <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px;">
-        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('dia')">Dia</button>
-        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('semana')">Semana</button>
-        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('mes')">Mês</button>
-        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('ano')">Ano</button>
-        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('tudo')">Tudo</button>
-    </div>
-
-    <div class="stats-grid">
-        <div class="card-stat">
-            <h4>Bruto (<span id="dash-periodo-txt">Mês</span>)</h4>
-            <p id="dash-bruto">R$ 0,00</p>
-        </div>
-        <div class="card-stat" style="border-left-color: var(--success);">
-            <h4>Líquido Casa</h4>
-            <p id="dash-liquido">R$ 0,00</p>
-        </div>
-    </div>
-
-    <div class="lista-box" style="background: var(--card); padding: 15px; border-radius: 15px;">
-        <h4 style="font-size: 11px; color: var(--accent); margin-bottom: 15px; text-transform: uppercase;">Recordes do Período</h4>
+    <div class="controls">
+        <label class="btn" for="ocr-upload">📸 Escanear Foto</label>
+        <input type="file" id="ocr-upload" accept="image/*">
         
-        <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
-            <span style="color:#888; font-size: 13px;">Total de Cortes:</span>
-            <strong id="dash-cortes-total">0</strong>
-        </div>
-        <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
-            <span style="color:#888; font-size: 13px;">Barbeiro + Usado:</span>
-            <strong id="dash-barbeiro-top">-</strong>
-        </div>
-        <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
-            <span id="label-cliente-periodo" style="color:#888; font-size: 13px;">Cliente do Período:</span>
-            <strong id="dash-cliente-top">-</strong>
-        </div>
-
-        <h4 style="font-size: 11px; color: var(--success); margin: 20px 0 10px 0; text-transform: uppercase; border-top: 1px solid #333; padding-top: 15px;">Recorde Histórico (Permanente)</h4>
-        <div style="display: flex; justify-content: space-between;">
-            <span style="color:#888; font-size: 13px;">🏆 Melhor Cliente de Sempre:</span>
-            <strong id="dash-cliente-permanente" style="color: var(--accent)">-</strong>
-        </div>
-    </div>
-</section>
-   <section id="view-agenda" class="view-section" style="display:none">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
-        <h3 style="margin:0">Agenda Geral</h3>
-        <div style="display:flex; gap:5px">
-            <button class="btn-small" onclick="app.renderView('add-agenda')" style="background:var(--accent); color:black; font-weight:bold">+ Novo</button>
-            <button class="btn-small" style="background:#333; color:white" onclick="app.renderView('historico')">📜 Histórico</button>
-            <button class="btn-small" style="background:#333; color:white" onclick="app.compartilharLink()">🔗 Link</button>
-        </div>
+        <button class="btn" onclick="exportPDF()">📄 Exportar PDF</button>
+        <button class="btn" onclick="document.getElementById('import-upload').click()">📥 Importar</button>
+        <input type="file" id="import-upload" accept="image/*, .json" onchange="handleImport(this)">
     </div>
 
-    <div style="margin-bottom: 15px;">
-        <input type="text" placeholder="🔍 Buscar por cliente ou barbeiro..." 
-               oninput="app.filtrarLista('agenda', this.value)" 
-               style="width: 100%; padding: 12px; border-radius: 8px; background: #1a1a1a; color: white; border: 1px solid #333;">
+    <div id="inventory-list"></div>
+
+    <div class="loading-overlay" id="loader">
+        <div style="color: var(--accent); margin-bottom: 10px;">Processando Documento...</div>
+        <div id="progress">0%</div>
     </div>
 
-    <div class="lista-box" id="lista-agenda-content"></div>
-</section>
-        <section id="view-historico" class="view-section" style="display:none">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
-                <h3>Histórico / Gestão</h3>
-                <button class="btn-small" style="background:#333; color:white" onclick="app.renderView('agenda')">Voltar</button>
-            </div>
+    <script>
+        const saboresIniciais = [
+            "Atum", "Berinjela", "Brasileiro", "Brócolis", "Bauru", "Carne com queijo", 
+            "Carne", "Carne com cheddar", "Calabresa", "Calabresa com catupiry", "Caipira", 
+            "Carne seca", "Chips", "Escarola", "Especial de carne", "Frango com catupiry", 
+            "Mini de carne", "Mini palmito", "Palmito", "Palmito com catupiry", "Pizza", 
+            "Portuguesa", "Queijo", "Quatro queijos", "Kibe", "Bolinho de carne", 
+            "Bolinho de bacalhau", "Bolinho de queijo", "Coxinha", "Risole", "Casquinha", 
+            "Camarão", "Pepperoni com queijo", "Pastel de carne com ovo", "Especial de frango", 
+            "Frango com queijo", "Milho com catupiry e queijo", "Costela com queijo", 
+            "Bolinho de carne seca", "Bolinho de brócolis com queijo", "Coxinha de catupiry"
+        ];
 
-            <div style="display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px;">
-                <button class="btn-small" onclick="app.setFiltroRapido('hoje')">Hoje</button>
-                <button class="btn-small" onclick="app.setFiltroRapido('mes')">Mês</button>
-                <button class="btn-small" style="background:#444; color:#fff" onclick="app.setFiltroRapido('limpar')">Limpar</button>
-            </div>
+        let db = JSON.parse(localStorage.getItem('barberPro_estoque')) || 
+                 saboresIniciais.map(s => ({ nome: s, qtd: 0 }));
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px">
-                <div>
-                    <label style="font-size:10px; color:#888">Data:</label>
-                    <input type="date" id="filtro-data-hist" onchange="app.filtrarHistorico()">
-                </div>
-                <div>
-                    <label style="font-size:10px; color:#888">Mês:</label>
-                    <input type="month" id="filtro-mes-hist" onchange="app.filtrarHistorico()">
-                </div>
-            </div>
-            <div id="lista-historico-content" class="lista-box"></div>
-        </section>
+        function render() {
+            const container = document.getElementById('inventory-list');
+            container.innerHTML = '';
 
-        <section id="view-prestadores" class="view-section" style="display:none">
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <h3>Equipe</h3>
-                <button class="btn-small" onclick="app.prepararEdicaoPrestador()">+ Novo</button>
-            </div><br>
-            <div id="lista-pre"></div>
-        </section>
+            db.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = `item-card ${item.qtd > 0 ? 'active' : ''}`;
+                card.innerHTML = `
+                    <div class="item-info">
+                        <div class="item-name">${item.nome}</div>
+                        <div class="item-status">${item.qtd > 0 ? 'Selecionado' : 'Zerarado'}</div>
+                    </div>
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="updateQtd(${index}, -1)">-</button>
+                        <input type="number" class="qty-input" value="${item.qtd}" 
+                               onchange="manualUpdate(${index}, this.value)">
+                        <button class="qty-btn" onclick="updateQtd(${index}, 1)">+</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            localStorage.setItem('barberPro_estoque', JSON.stringify(db));
+        }
 
-        <section id="view-estoque" class="view-section" style="display:none">
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <h3>Estoque</h3>
-                <button class="btn-small" onclick="app.prepararEdicaoEstoque()">+ Item</button>
-            </div><br>
-            <input type="text" placeholder="🔍 Pesquisar no estoque..." oninput="app.filtrarLista('estoque', this.value)" style="margin-bottom:15px">
-            <div class="lista-box" id="lista-estoque-content"></div>
-        </section>
+        function updateQtd(index, val) {
+            db[index].qtd = Math.max(0, db[index].qtd + val);
+            render();
+        }
 
-        <section id="view-servicos" class="view-section" style="display:none">
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <h3>Serviços</h3>
-                <button class="btn-small" onclick="app.prepararEdicaoServico()">+ Novo</button>
-            </div><br>
-            <input type="text" placeholder="🔍 Pesquisar serviço..." oninput="app.filtrarLista('servicos', this.value)" style="margin-bottom:15px">
-            <div class="lista-box" id="lista-servicos-content"></div>
-        </section>
-    </main>
+        function manualUpdate(index, val) {
+            db[index].qtd = Math.max(0, parseInt(val) || 0);
+            render();
+        }
 
-    <nav class="tab-bar">
-        <button class="tab-item active" onclick="app.renderView('dash', this)"><i>🏠</i><span>Início</span></button>
-        <button class="tab-item" onclick="app.renderView('agenda', this)"><i>📅</i><span>Agenda</span></button>
-        <button class="tab-item" onclick="app.renderView('servicos', this)"><i>✂️</i><span>Serviços</span></button> 
-        <button class="tab-item" onclick="app.renderView('prestadores', this)"><i>👥</i><span>Equipe</span></button>
-        <button class="tab-item" onclick="app.renderView('estoque', this)"><i>📦</i><span>Estoque</span></button>
-    </nav>
+        async function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const date = new Date().toLocaleString();
+            
+            doc.setFontSize(18);
+            doc.setTextColor(212, 175, 55);
+            doc.text("Relatório de Pedidos - BarberPro", 20, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Gerado em: ${date}`, 20, 28);
+            
+            doc.setDrawColor(212, 175, 55);
+            doc.line(20, 32, 190, 32);
 
-    <div id="modal-container" class="modal-overlay">
-        <div class="bottom-sheet" id="modal-content"></div>
-    </div>
+            let y = 40;
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+            
+            const itensComQtd = db.filter(i => i.qtd > 0);
+            
+            if(itensComQtd.length === 0) {
+                doc.text("Nenhum item selecionado.", 20, y);
+            } else {
+                itensComQtd.forEach(item => {
+                    if (y > 270) { doc.addPage(); y = 20; }
+                    doc.text(`${item.nome}:`, 20, y);
+                    doc.text(`${item.qtd}`, 170, y, { align: 'right' });
+                    y += 8;
+                });
+            }
 
-    <script src="app.js"></script>
+            const rawData = JSON.stringify(db);
+            doc.setFontSize(1);
+            doc.setTextColor(255, 255, 255); 
+            doc.text(rawData, 10, 290);
+
+            doc.save(`pedido_${new Date().getTime()}.pdf`);
+        }
+
+        function handleImport(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            if (file.type === "application/json") {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    db = JSON.parse(e.target.result);
+                    render();
+                };
+                reader.readAsText(file);
+            } else {
+                runOCR(file);
+            }
+        }
+
+        function runOCR(file) {
+            const loader = document.getElementById('loader');
+            const progress = document.getElementById('progress');
+            loader.style.display = 'flex';
+
+            Tesseract.recognize(file, 'por', {
+                logger: m => { if (m.status === 'recognizing text') progress.innerText = Math.round(m.progress * 100) + '%'; }
+            }).then(({ data: { text } }) => {
+                processTextData(text);
+                loader.style.display = 'none';
+            });
+        }
+
+        function processTextData(text) {
+            const lines = text.toLowerCase().split('\n');
+            db.forEach(item => {
+                lines.forEach(line => {
+                    if (line.includes(item.nome.toLowerCase())) {
+                        const match = line.match(/\d+/);
+                        if (match) item.qtd = parseInt(match[0]);
+                    }
+                });
+            });
+            render();
+        }
+
+        render();
+    </script>
 </body>
 </html>
