@@ -61,7 +61,7 @@
     <div id="inventory-list"></div>
 
     <div class="loading-overlay" id="loader">
-        <div style="color: var(--accent); margin-bottom: 10px;">Processando Arquivo...</div>
+        <div style="color: var(--accent); margin-bottom: 10px;">Processando e Somando...</div>
         <div id="progress" style="font-size: 1.5rem; color: white;">0%</div>
         <canvas id="pdf-canvas" style="display:none;"></canvas>
     </div>
@@ -107,7 +107,7 @@
         async function handleFile(file) {
             const loader = document.getElementById('loader');
             loader.style.display = 'flex';
-            document.getElementById('progress').innerText = 'Iniciando...';
+            document.getElementById('progress').innerText = 'Convertendo...';
 
             try {
                 let source = file;
@@ -133,7 +133,10 @@
                     lines.forEach(line => {
                         if (line.includes(item.nome.toLowerCase())) {
                             const n = line.match(/\d+/);
-                            if (n) item.qtd = parseInt(n[0]);
+                            if (n) {
+                                // Lógica de soma cumulativa: Qtd atual + Qtd detectada
+                                item.qtd += parseInt(n[0]);
+                            }
                         }
                     });
                 });
@@ -149,7 +152,15 @@
             if (!file) return;
             if (file.name.endsWith('.json')) {
                 const reader = new FileReader();
-                reader.onload = ev => { db = JSON.parse(ev.target.result); render(); };
+                reader.onload = ev => { 
+                    const imported = JSON.parse(ev.target.result);
+                    // Soma também na importação de JSON
+                    imported.forEach(impItem => {
+                        let localItem = db.find(i => i.nome === impItem.nome);
+                        if(localItem) localItem.qtd += impItem.qtd;
+                    });
+                    render(); 
+                };
                 reader.readAsText(file);
             } else { handleFile(file); }
         };
