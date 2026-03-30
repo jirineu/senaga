@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salgados Express - Correção de Soma</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <title>Salgados Express - Calculador de Diferença</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        :root { --bg: #121212; --card: #1e1e1e; --accent: #D4AF37; --text: #ffffff; --border: #333; }
+        :root { --bg: #121212; --card: #1e1e1e; --accent: #D4AF37; --text: #ffffff; --border: #333; --diff: #2ecc71; }
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
         body { background-color: var(--bg); color: var(--text); padding: 15px; padding-bottom: 80px; }
         header { text-align: center; padding: 20px 0; border-bottom: 1px solid var(--accent); margin-bottom: 20px; }
@@ -17,18 +16,21 @@
         .btn {
             background: transparent; border: 1px solid var(--accent); color: var(--accent);
             padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center; font-size: 0.8rem; text-align: center;
         }
         .btn:active { background: var(--accent); color: var(--bg); }
+        .btn-calc { border-color: var(--diff); color: var(--diff); }
         #inventory-list { display: grid; gap: 8px; }
         .item-card { background: var(--card); border-left: 4px solid var(--border); padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; }
         .item-card.active { border-left-color: var(--accent); }
+        .item-card.is-diff { border-left-color: var(--diff); background: #1a251e; }
         .qty-controls { display: flex; align-items: center; gap: 8px; }
         .qty-btn { width: 40px; height: 40px; border-radius: 5px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 1.3rem; display: flex; align-items: center; justify-content: center; }
         .qty-input { width: 45px; text-align: center; background: transparent; border: none; color: white; font-size: 1rem; font-weight: bold; }
         .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         input[type="file"] { display: none; }
         .id-badge { font-size: 0.6rem; color: #666; margin-right: 5px; }
+        .info-msg { font-size: 0.7rem; color: #aaa; grid-column: span 2; text-align: center; margin-top: -5px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -36,23 +38,25 @@
     <header><h1>Estoque de Salgados</h1></header>
 
     <div class="controls">
-        <label class="btn" for="cam-capture">📸 ESCANEAR</label>
-        <input type="file" id="cam-capture" accept="image/*" capture="environment">
-        
-        <button class="btn" onclick="exportPDF()">📄 GERAR PDF</button>
-        
-        <label class="btn" for="doc-import">📥 IMPORTAR DOC</label>
-        <input type="file" id="doc-import" accept=".json,application/json,.pdf,application/pdf">
+        <label class="btn" for="doc-import">📥 IMPORTAR PDF</label>
+        <input type="file" id="doc-import" accept=".pdf,application/pdf">
 
-        <button class="btn" onclick="clearData()" style="border-color: #666; color: #666;">ZERAR TUDO</button>
+        <button class="btn" onclick="saveAsBase()">💾 SALVAR COMO BASE</button>
+        
+        <button class="btn btn-calc" onclick="calculateDifference()">🧮 CALCULAR DIFERENÇA</button>
+        
+        <button class="btn" onclick="exportPDF()">📄 GERAR PDF FINAL</button>
+
+        <div class="info-msg" id="status-msg">Importe o PDF e salve como base para calcular a diferença.</div>
+
+        <button class="btn" onclick="clearData()" style="border-color: #666; color: #666; grid-column: span 2;">ZERAR TUDO</button>
     </div>
 
     <div id="inventory-list"></div>
 
     <div class="loading-overlay" id="loader">
-        <div style="color: var(--accent); margin-bottom: 10px;">Somando Quantidades...</div>
-        <div id="progress" style="font-size: 1.5rem; color: white;">0%</div>
-        <canvas id="pdf-canvas" style="display:none;"></canvas>
+        <div style="color: var(--accent); margin-bottom: 10px;">Lendo dados do PDF...</div>
+        <div id="progress" style="font-size: 1.5rem; color: white;">Processando...</div>
     </div>
 
     <script>
@@ -77,13 +81,14 @@
         ];
 
         let db = JSON.parse(localStorage.getItem('salgados_db_v3')) || DATA_BASE.map(item => ({ ...item, qtd: 0 }));
+        let isCalculated = false;
 
         function render() {
             const list = document.getElementById('inventory-list');
             list.innerHTML = '';
             db.forEach((item) => {
                 const div = document.createElement('div');
-                div.className = `item-card ${item.qtd > 0 ? 'active' : ''}`;
+                div.className = `item-card ${item.qtd !== 0 ? 'active' : ''} ${isCalculated ? 'is-diff' : ''}`;
                 div.innerHTML = `
                     <div class="item-name"><span class="id-badge">#${item.id}</span>${item.nome}</div>
                     <div class="qty-controls">
@@ -93,70 +98,87 @@
                     </div>`;
                 list.appendChild(div);
             });
-            localStorage.setItem('salgados_db_v3', JSON.stringify(db));
+            if(!isCalculated) localStorage.setItem('salgados_db_v3', JSON.stringify(db));
         }
 
         function upd(id, v) { 
             const item = db.find(i => i.id === id);
-            if(item) { item.qtd = Math.max(0, (parseInt(item.qtd) || 0) + v); render(); }
+            if(item) { item.qtd = (parseInt(item.qtd) || 0) + v; render(); }
         }
         function set(id, v) { 
             const item = db.find(i => i.id === id);
-            if(item) { item.qtd = Math.max(0, parseInt(v) || 0); render(); }
+            if(item) { item.qtd = parseInt(v) || 0; render(); }
         }
-        function clearData() { if(confirm('Zerar tudo?')) { db.forEach(i => i.qtd = 0); render(); } }
 
+        function saveAsBase() {
+            localStorage.setItem('last_pdf_values', JSON.stringify(db));
+            document.getElementById('status-msg').innerText = "✅ Base salva! Agora ajuste os valores atuais e clique em CALCULAR.";
+            alert("Estoque atual salvo como base de comparação.");
+        }
+
+        function calculateDifference() {
+            const baseStr = localStorage.getItem('last_pdf_values');
+            if(!baseStr) {
+                alert("Você precisa salvar uma BASE primeiro para poder calcular a diferença.");
+                return;
+            }
+            const baseData = JSON.parse(baseStr);
+            
+            db = db.map(item => {
+                const baseItem = baseData.find(b => b.id === item.id);
+                const baseQtd = baseItem ? baseItem.qtd : 0;
+                return { ...item, qtd: item.qtd - baseQtd };
+            });
+
+            isCalculated = true;
+            document.getElementById('status-msg').innerText = "📊 Diferença calculada. Você já pode gerar o PDF.";
+            render();
+        }
+
+        function clearData() { 
+            if(confirm('Isso apagará tudo, inclusive a base salva. Deseja continuar?')) { 
+                db = DATA_BASE.map(item => ({ ...item, qtd: 0 }));
+                localStorage.removeItem('last_pdf_values');
+                localStorage.removeItem('salgados_db_v3');
+                isCalculated = false;
+                document.getElementById('status-msg').innerText = "Dados resetados.";
+                render(); 
+            } 
+        }
+
+        // Função de importação via PDF (usando extração de texto direta do PDF)
         async function handleFile(file) {
             if(!file) return;
             const loader = document.getElementById('loader');
             loader.style.display = 'flex';
             try {
-                let source = file;
-                if (file.type === "application/pdf") {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                    const page = await pdf.getPage(1);
-                    const viewport = page.getViewport({ scale: 2 });
-                    const canvas = document.getElementById('pdf-canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height; canvas.width = viewport.width;
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
-                    source = canvas.toDataURL();
-                }
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                const page = await pdf.getPage(1);
+                const textContent = await page.getTextContent();
+                const textLines = textContent.items.map(item => item.str.toLowerCase());
 
-                const result = await Tesseract.recognize(source, 'por');
-                const textLines = result.data.text.toLowerCase().split('\n');
+                const fullText = textLines.join(" ");
+                const sortedSearch = [...DATA_BASE].sort((a, b) => b.nome.length - a.nome.length);
 
-                // Ordenar por nomes longos para evitar conflito (ex: "Carne com queijo" vs "Carne")
-                const sortedSearch = [...db].sort((a, b) => b.nome.length - a.nome.length);
-
-                textLines.forEach(line => {
-                    for (let item of sortedSearch) {
-                        const nomeSabor = item.nome.toLowerCase();
-                        
-                        if (line.includes(nomeSabor)) {
-                            // CORREÇÃO: Remove o nome do sabor da linha antes de buscar o número
-                            // Isso impede que o sistema confunda IDs numéricos se eles estiverem no nome
-                            let linePure = line.replace(nomeSabor, ""); 
-                            
-                            const match = linePure.match(/\d+/);
-                            if (match) {
-                                const qtdExtraida = parseInt(match[0]);
-                                
-                                // Bloqueio para não somar "Carne" se a linha for "Carne com queijo"
-                                if (item.nome === "Carne" && (line.includes("queijo") || line.includes("cheddar") || line.includes("seca"))) {
-                                    continue;
-                                }
-
-                                // SOMA CUMULATIVA: Valor atual + Valor do PDF
-                                item.qtd = (parseInt(item.qtd) || 0) + qtdExtraida;
-                                break; 
-                            }
+                // Lógica de busca de valores no texto do PDF
+                sortedSearch.forEach(item => {
+                    const nomeSabor = item.nome.toLowerCase();
+                    if (fullText.includes(nomeSabor)) {
+                        // Tenta encontrar o número mais próximo após o nome do sabor
+                        const regex = new RegExp(nomeSabor + "\\s*(\\d+)", "i");
+                        const match = fullText.match(regex);
+                        if (match) {
+                            let localItem = db.find(i => i.id === item.id);
+                            if(localItem) localItem.qtd = parseInt(match[1]);
                         }
                     }
                 });
-            } catch (e) { alert("Erro na leitura."); }
+            } catch (e) { 
+                alert("Erro ao ler o PDF. Certifique-se de que é um PDF com texto legível."); 
+            }
             loader.style.display = 'none';
+            isCalculated = false;
             render();
         }
 
@@ -164,36 +186,26 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             let y = 20;
+            const titulo = isCalculated ? "RELATÓRIO DE DIFERENÇA" : "ESTOQUE ATUAL";
+
             doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F');
-            doc.setTextColor(212, 175, 55); doc.text("ESTOQUE ATUAL", 105, y, { align: 'center' });
+            doc.setTextColor(212, 175, 55); doc.setFontSize(16);
+            doc.text(titulo, 105, y, { align: 'center' });
+            
             y += 15; doc.setFontSize(10); doc.setTextColor(255, 255, 255);
+            
             db.forEach(item => {
-                if(item.qtd > 0) {
+                if(item.qtd !== 0) {
                     doc.text(`${item.nome}`, 20, y); 
                     doc.text(String(item.qtd), 180, y, { align: 'right' });
                     y += 8;
+                    if(y > 280) { doc.addPage(); y = 20; doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F'); }
                 }
             });
-            doc.save('estoque.pdf');
+            doc.save(isCalculated ? 'diferenca.pdf' : 'estoque.pdf');
         }
 
-        document.getElementById('cam-capture').onchange = e => handleFile(e.target.files[0]);
-        document.getElementById('doc-import').onchange = e => {
-            const file = e.target.files[0];
-            if (file && file.name.endsWith('.json')) {
-                const reader = new FileReader();
-                reader.onload = ev => { 
-                    const imported = JSON.parse(ev.target.result);
-                    imported.forEach(imp => {
-                        let local = db.find(i => i.id === imp.id);
-                        if(local) local.qtd += (parseInt(imp.qtd) || 0);
-                    });
-                    render();
-                };
-                reader.readAsText(file);
-            } else { handleFile(file); }
-        };
-
+        document.getElementById('doc-import').onchange = e => handleFile(e.target.files[0]);
         render();
     </script>
 </body>
