@@ -13,6 +13,15 @@
         header { text-align: center; padding: 20px 0; border-bottom: 1px solid var(--accent); margin-bottom: 20px; }
         h1 { color: var(--accent); font-size: 1.4rem; text-transform: uppercase; letter-spacing: 2px; }
         
+        /* NOVOS ESTILOS PARA OS BOTÕES DE LOJA */
+        .store-selector { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; justify-content: center; }
+        .store-btn { 
+            padding: 5px 10px; border: 1px solid #444; background: #222; color: #888; 
+            border-radius: 4px; cursor: pointer; font-size: 0.7rem; text-transform: uppercase;
+        }
+        .store-btn.active { border-color: var(--accent); color: var(--accent); background: #2a2410; }
+        .add-store { background: var(--accent); color: var(--bg); font-weight: bold; width: 30px; }
+
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
         
         .btn {
@@ -40,6 +49,8 @@
 <body>
 
     <header><h1>Estoque de Salgados</h1></header>
+
+    <div class="store-selector" id="store-container"></div>
 
     <div class="controls">
         <label class="btn" for="doc-import">📥 IMPORTAR PDF</label>
@@ -82,8 +93,40 @@
             { id: 41, nome: "Coxinha de catupiry" }
         ];
 
+        // LOGICA DE LOJAS
+        let stores = JSON.parse(localStorage.getItem('stores_list')) || ["Vila Prudente", "Interlagos", "São Bernardo Max"];
+        let activeStore = localStorage.getItem('active_store') || "";
+
         let db = JSON.parse(localStorage.getItem('salgados_db_v3')) || DATA_BASE.map(item => ({ ...item, qtd: 0 }));
         let isCalculated = false; 
+
+        function renderStores() {
+            const container = document.getElementById('store-container');
+            container.innerHTML = '';
+            stores.forEach(name => {
+                const btn = document.createElement('button');
+                btn.className = `store-btn ${activeStore === name ? 'active' : ''}`;
+                btn.innerText = name;
+                btn.onclick = () => {
+                    activeStore = name;
+                    localStorage.setItem('active_store', name);
+                    renderStores();
+                };
+                container.appendChild(btn);
+            });
+            const addBtn = document.createElement('button');
+            addBtn.className = 'store-btn add-store';
+            addBtn.innerText = '+';
+            addBtn.onclick = () => {
+                const name = prompt("Nome da nova loja:");
+                if(name && !stores.includes(name)) {
+                    stores.push(name);
+                    localStorage.setItem('stores_list', JSON.stringify(stores));
+                    renderStores();
+                }
+            };
+            container.appendChild(addBtn);
+        }
 
         function render() {
             const list = document.getElementById('inventory-list');
@@ -112,40 +155,31 @@
             if(item) { item.qtd = parseInt(v) || 0; render(); }
         }
 
-        // FUNÇÃO MODIFICADA: Agora ativa o modo de produção (oculta zeros) ao salvar
         function saveAsBase() {
             localStorage.setItem('last_pdf_base', JSON.stringify(db));
             isCalculated = true; 
-            document.getElementById('status-msg').innerText = "✅ Base salva. Próximo PDF será: PRODUÇÃO (sem zeros).";
-            alert("Valores salvos como Base! Clique em Gerar PDF para exportar a produção.");
+            document.getElementById('status-msg').innerText = `✅ Base salva para ${activeStore || 'Loja'}. PDF será PRODUÇÃO.`;
+            alert("Valores salvos como Base!");
         }
 
         function applyDifferenceToScreen() {
             const baseStr = localStorage.getItem('last_pdf_base');
-            if(!baseStr) {
-                alert("Clique em SALVAR BASE primeiro.");
-                return;
-            }
+            if(!baseStr) { alert("Clique em SALVAR BASE primeiro."); return; }
             const baseData = JSON.parse(baseStr);
-            
             db = db.map(item => {
                 const baseItem = baseData.find(b => b.id === item.id);
                 const valorBase = baseItem ? (parseInt(baseItem.qtd) || 0) : 0;
-                const valorAtual = parseInt(item.qtd) || 0;
-                return { ...item, qtd: valorAtual - valorBase };
+                return { ...item, qtd: (parseInt(item.qtd) || 0) - valorBase };
             });
-
             isCalculated = true; 
-            document.getElementById('status-msg').innerText = "📊 Diferença aplicada. Próximo PDF será: PRODUÇÃO.";
             render();
         }
 
         function clearData() { 
-            if(confirm('Limpar tela e memória?')) { 
+            if(confirm('Limpar tudo?')) { 
                 db = DATA_BASE.map(item => ({ ...item, qtd: 0 }));
                 isCalculated = false;
-                localStorage.clear();
-                document.getElementById('status-msg').innerText = "Memória limpa.";
+                localStorage.removeItem('salgados_db_v3');
                 render(); 
             } 
         }
@@ -159,19 +193,13 @@
                 const page = await pdf.getPage(1);
                 const textContent = await page.getTextContent();
                 const fullText = textContent.items.map(item => item.str).join(" ").toLowerCase();
-
                 const sortedSearch = [...DATA_BASE].sort((a, b) => b.nome.length - a.nome.length);
-
                 sortedSearch.forEach(item => {
-                    const nomeSabor = item.nome.toLowerCase();
-                    const regex = new RegExp(nomeSabor + "\\s*(-?\\d+)", "i");
+                    const regex = new RegExp(item.nome.toLowerCase() + "\\s*(-?\\d+)", "i");
                     const match = fullText.match(regex);
                     if (match) {
-                        const valorExtraido = parseInt(match[1]);
                         let localItem = db.find(i => i.id === item.id);
-                        if(localItem) {
-                            localItem.qtd += valorExtraido;
-                        }
+                        if(localItem) localItem.qtd += parseInt(match[1]);
                     }
                 });
             } catch (e) { alert("Erro ao ler PDF."); }
@@ -184,32 +212,25 @@
             const doc = new jsPDF();
             let y = 20;
 
-            const tituloDoc = isCalculated ? "PDF PRODUÇÃO" : "PDF LOJA";
-            const nomeArquivo = isCalculated ? "producao.pdf" : "loja.pdf";
+            const lojaNome = activeStore ? activeStore.replace(/\s+/g, '_') : "Loja";
+            const tipoDoc = isCalculated ? "producao" : "loja";
+            const nomeArquivo = `${lojaNome}_${tipoDoc}.pdf`;
 
             doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F');
             doc.setTextColor(212, 175, 55); doc.setFontSize(16);
-            doc.text(tituloDoc, 105, y, { align: 'center' });
+            doc.text(`${activeStore || 'LOJA'} - ${tipoDoc.toUpperCase()}`, 105, y, { align: 'center' });
             
             y += 15; doc.setFontSize(10); doc.setTextColor(255, 255, 255);
-            
-            // Filtra itens zerados apenas se estiver no modo PRODUÇÃO
             const itensParaImprimir = isCalculated ? db.filter(item => item.qtd !== 0) : db;
 
             itensParaImprimir.forEach(item => {
                 doc.text(`${item.nome}`, 20, y); 
                 doc.text(String(item.qtd), 180, y, { align: 'right' });
                 y += 8;
-                
-                if(y > 280) { 
-                    doc.addPage(); y = 20; 
-                    doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F'); 
-                }
+                if(y > 280) { doc.addPage(); y = 20; doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F'); }
             });
             
             doc.save(nomeArquivo);
-
-            // Reseta para o modo LOJA após a exportação da produção
             if(isCalculated) {
                 isCalculated = false;
                 document.getElementById('status-msg').innerText = "PDF de Produção gerado. Modo retornado para LOJA.";
@@ -217,6 +238,7 @@
         }
 
         document.getElementById('doc-import').onchange = e => handleFile(e.target.files[0]);
+        renderStores();
         render();
     </script>
 </body>
