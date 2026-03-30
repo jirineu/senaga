@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BarberPro - Gestão de Sabores</title>
+    <title>BarberPro - Gestão Premium</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -51,60 +51,50 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            text-align: center;
         }
 
         .btn:active { background: var(--accent); color: var(--bg); }
 
-        #inventory-list {
-            display: grid;
-            gap: 10px;
-        }
+        #inventory-list { display: grid; gap: 8px; }
 
         .item-card {
             background: var(--card);
             border-left: 4px solid var(--border);
-            padding: 15px;
+            padding: 12px 15px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-radius: 4px;
-            transition: 0.3s;
         }
 
         .item-card.active { border-left-color: var(--accent); }
 
-        .item-info { flex: 1; }
-        .item-name { font-weight: bold; font-size: 1rem; margin-bottom: 4px; }
-        .item-status { font-size: 0.75rem; color: #888; }
+        .item-name { font-weight: 500; font-size: 0.95rem; flex: 1; }
 
-        .qty-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .qty-controls { display: flex; align-items: center; gap: 8px; }
 
         .qty-btn {
-            width: 40px;
-            height: 40px;
+            width: 38px;
+            height: 38px;
             border-radius: 5px;
             border: 1px solid var(--accent);
             background: transparent;
             color: var(--accent);
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .qty-input {
-            width: 45px;
+            width: 40px;
             text-align: center;
             background: transparent;
             border: none;
             color: white;
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: bold;
         }
 
@@ -112,7 +102,7 @@
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             z-index: 1000;
             flex-direction: column;
             align-items: center;
@@ -125,27 +115,30 @@
 <body>
 
     <header>
-        <h1>Gestão de Pedidos</h1>
+        <h1>Stock & Pedidos</h1>
     </header>
 
     <div class="controls">
-        <label class="btn" for="ocr-upload">📸 Escanear Foto</label>
-        <input type="file" id="ocr-upload" accept="image/*">
+        <label class="btn" for="cam-capture">📸 ESCANEAR FOTO</label>
+        <input type="file" id="cam-capture" accept="image/*" capture="environment">
         
-        <button class="btn" onclick="exportPDF()">📄 Exportar PDF</button>
-        <button class="btn" onclick="document.getElementById('import-upload').click()">📥 Importar</button>
-        <input type="file" id="import-upload" accept="image/*, .json" onchange="handleImport(this)">
+        <button class="btn" onclick="exportPDF()">📄 GERAR PDF</button>
+        
+        <label class="btn" for="doc-import">📥 IMPORTAR DOC</label>
+        <input type="file" id="doc-import" accept=".json, .pdf, application/json, application/pdf">
+
+        <button class="btn" onclick="clearData()" style="border-color: #666; color: #666;">Limpar Tudo</button>
     </div>
 
     <div id="inventory-list"></div>
 
     <div class="loading-overlay" id="loader">
-        <div style="color: var(--accent); margin-bottom: 10px;">Processando Documento...</div>
-        <div id="progress">0%</div>
+        <div style="color: var(--accent); margin-bottom: 10px;">Lendo Imagem...</div>
+        <div id="progress" style="font-size: 1.5rem; color: white;">0%</div>
     </div>
 
     <script>
-        const saboresIniciais = [
+        const SABORES = [
             "Atum", "Berinjela", "Brasileiro", "Brócolis", "Bauru", "Carne com queijo", 
             "Carne", "Carne com cheddar", "Calabresa", "Calabresa com catupiry", "Caipira", 
             "Carne seca", "Chips", "Escarola", "Especial de carne", "Frango com catupiry", 
@@ -157,125 +150,105 @@
             "Bolinho de carne seca", "Bolinho de brócolis com queijo", "Coxinha de catupiry"
         ];
 
-        let db = JSON.parse(localStorage.getItem('barberPro_estoque')) || 
-                 saboresIniciais.map(s => ({ nome: s, qtd: 0 }));
+        let db = JSON.parse(localStorage.getItem('barber_db')) || SABORES.map(s => ({ nome: s, qtd: 0 }));
 
         function render() {
-            const container = document.getElementById('inventory-list');
-            container.innerHTML = '';
-
-            db.forEach((item, index) => {
-                const card = document.createElement('div');
-                card.className = `item-card ${item.qtd > 0 ? 'active' : ''}`;
-                card.innerHTML = `
-                    <div class="item-info">
-                        <div class="item-name">${item.nome}</div>
-                        <div class="item-status">${item.qtd > 0 ? 'Selecionado' : 'Zerarado'}</div>
-                    </div>
+            const list = document.getElementById('inventory-list');
+            list.innerHTML = '';
+            db.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = `item-card ${item.qtd > 0 ? 'active' : ''}`;
+                div.innerHTML = `
+                    <div class="item-name">${item.nome}</div>
                     <div class="qty-controls">
-                        <button class="qty-btn" onclick="updateQtd(${index}, -1)">-</button>
-                        <input type="number" class="qty-input" value="${item.qtd}" 
-                               onchange="manualUpdate(${index}, this.value)">
-                        <button class="qty-btn" onclick="updateQtd(${index}, 1)">+</button>
+                        <button class="qty-btn" onclick="upd(${i},-1)">-</button>
+                        <input type="number" class="qty-input" value="${item.qtd}" onchange="set(${i},this.value)">
+                        <button class="qty-btn" onclick="upd(${i},1)">+</button>
                     </div>
                 `;
-                container.appendChild(card);
+                list.appendChild(div);
             });
-            localStorage.setItem('barberPro_estoque', JSON.stringify(db));
+            localStorage.setItem('barber_db', JSON.stringify(db));
         }
 
-        function updateQtd(index, val) {
-            db[index].qtd = Math.max(0, db[index].qtd + val);
-            render();
-        }
-
-        function manualUpdate(index, val) {
-            db[index].qtd = Math.max(0, parseInt(val) || 0);
-            render();
-        }
+        function upd(i, v) { db[i].qtd = Math.max(0, db[i].qtd + v); render(); }
+        function set(i, v) { db[i].qtd = Math.max(0, parseInt(v) || 0); render(); }
+        function clearData() { if(confirm('Zerar todos os valores?')) { db.forEach(i => i.qtd = 0); render(); } }
 
         async function exportPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-            const date = new Date().toLocaleString();
+            let y = 20;
+
+            doc.setFillColor(18, 18, 18);
+            doc.rect(0, 0, 210, 297, 'F');
             
-            doc.setFontSize(18);
             doc.setTextColor(212, 175, 55);
-            doc.text("Relatório de Pedidos - BarberPro", 20, 20);
-            
+            doc.setFontSize(16);
+            doc.text("PEDIDO DE ESTOQUE", 105, y, { align: 'center' });
+            y += 15;
+
             doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Gerado em: ${date}`, 20, 28);
+            doc.setTextColor(255, 255, 255);
             
-            doc.setDrawColor(212, 175, 55);
-            doc.line(20, 32, 190, 32);
+            db.forEach(item => {
+                if (y > 280) { doc.addPage(); doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F'); y = 20; }
+                doc.text(item.nome, 20, y);
+                doc.text(String(item.qtd), 180, y, { align: 'right' });
+                doc.setDrawColor(51, 51, 51);
+                doc.line(20, y+2, 190, y+2);
+                y += 7;
+            });
 
-            let y = 40;
-            doc.setFontSize(12);
-            doc.setTextColor(0);
-            
-            const itensComQtd = db.filter(i => i.qtd > 0);
-            
-            if(itensComQtd.length === 0) {
-                doc.text("Nenhum item selecionado.", 20, y);
-            } else {
-                itensComQtd.forEach(item => {
-                    if (y > 270) { doc.addPage(); y = 20; }
-                    doc.text(`${item.nome}:`, 20, y);
-                    doc.text(`${item.qtd}`, 170, y, { align: 'right' });
-                    y += 8;
-                });
-            }
-
-            const rawData = JSON.stringify(db);
+            const metadata = JSON.stringify(db);
             doc.setFontSize(1);
-            doc.setTextColor(255, 255, 255); 
-            doc.text(rawData, 10, 290);
+            doc.setTextColor(18, 18, 18); 
+            doc.text(metadata, 10, 295);
 
-            doc.save(`pedido_${new Date().getTime()}.pdf`);
+            doc.save('pedido_estoque.pdf');
         }
 
-        function handleImport(input) {
-            const file = input.files[0];
+        document.getElementById('cam-capture').addEventListener('change', function(e) {
+            const file = e.target.files[0];
             if (!file) return;
-
-            if (file.type === "application/json") {
-                const reader = new FileReader();
-                reader.onload = e => {
-                    db = JSON.parse(e.target.result);
-                    render();
-                };
-                reader.readAsText(file);
-            } else {
-                runOCR(file);
-            }
-        }
-
-        function runOCR(file) {
+            
             const loader = document.getElementById('loader');
-            const progress = document.getElementById('progress');
             loader.style.display = 'flex';
 
             Tesseract.recognize(file, 'por', {
-                logger: m => { if (m.status === 'recognizing text') progress.innerText = Math.round(m.progress * 100) + '%'; }
+                logger: m => { if(m.status==='recognizing text') document.getElementById('progress').innerText = Math.round(m.progress*100)+'%'; }
             }).then(({ data: { text } }) => {
-                processTextData(text);
-                loader.style.display = 'none';
-            });
-        }
-
-        function processTextData(text) {
-            const lines = text.toLowerCase().split('\n');
-            db.forEach(item => {
-                lines.forEach(line => {
-                    if (line.includes(item.nome.toLowerCase())) {
-                        const match = line.match(/\d+/);
-                        if (match) item.qtd = parseInt(match[0]);
-                    }
+                const lines = text.toLowerCase().split('\n');
+                db.forEach(item => {
+                    lines.forEach(line => {
+                        if (line.includes(item.nome.toLowerCase())) {
+                            const n = line.match(/\d+/);
+                            if (n) item.qtd = parseInt(n[0]);
+                        }
+                    });
                 });
+                loader.style.display = 'none';
+                render();
             });
-            render();
-        }
+        });
+
+        document.getElementById('doc-import').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    if (file.name.endsWith('.json')) {
+                        db = JSON.parse(ev.target.result);
+                        render();
+                    } else if (file.name.endsWith('.pdf')) {
+                        alert("Para importar PDF, o sistema usa OCR. Use o botão 'ESCANEAR FOTO' e selecione o PDF ou foto dele.");
+                    }
+                } catch(err) { alert("Erro ao importar."); }
+            };
+            reader.readAsText(file);
+        });
 
         render();
     </script>
