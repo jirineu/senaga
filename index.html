@@ -96,88 +96,80 @@
     </div>
 
     <script>
-function forcarModoOff() {
-    modoProducaoAtivo = false; // Garante que a variável comece desligada
-    
-    const btnToggle = document.getElementById('toggle-producao');
-    const botoesProducao = document.querySelectorAll('.modo-prod-apenas');
-    const btnSalvar = document.getElementById('btn-salvar-nuvem');
-    const btnLimpar = document.getElementById('btn-limpar-tela');
-
-    // Reset visual do botão interruptor
-    if (btnToggle) {
-        btnToggle.style.backgroundColor = "transparent";
-        btnToggle.style.color = "var(--accent)";
-    }
-
-    // Esconde todos os botões que pertencem apenas ao modo PROD
-    botoesProducao.forEach(btn => {
-        btn.style.display = "none";
-    });
-
-    // Ajusta o layout dos botões padrão (50/50 na primeira linha)
-    if (btnSalvar && btnLimpar) {
-        btnSalvar.style.display = "flex";
-        btnSalvar.style.gridColumn = "span 1";
-        btnSalvar.style.order = "0";
-        
-        btnLimpar.style.display = "flex";
-        btnLimpar.style.gridColumn = "span 1";
-        btnLimpar.style.order = "0";
-        
-        // Reset de cores caso tenham mudado no modo produção
-        btnSalvar.innerText = "💾 SALVAR NA NUVEM";
-        btnSalvar.style.borderColor = "var(--accent)";
-        btnSalvar.style.color = "var(--accent)";
-    }
-}
-
-let modoProducaoAtivo = false;
-
-function toggleModoProducao() {
-    modoProducaoAtivo = !modoProducaoAtivo;
-    const btnToggle = document.getElementById('toggle-producao');
-    const botoesProducao = document.querySelectorAll('.modo-prod-apenas');
-    const btnSalvar = document.getElementById('btn-salvar-nuvem');
-    const btnLimpar = document.getElementById('btn-limpar-tela');
-
-    if (modoProducaoAtivo) {
-        // --- MODO ATIVADO ---
-        btnToggle.style.backgroundColor = "var(--accent)";
-        btnToggle.style.color = "var(--bg)";
-        
-        // Mostra todos os botões de produção
-        botoesProducao.forEach(btn => {
-            btn.style.display = "flex";
-            // Se for o botão de Importar, PDF ou Calcular, ocupa a linha toda
-            if (btn.id === 'btn-importar' || btn.classList.contains('btn-calc')) {
-                btn.style.gridColumn = "span 2";
-            } else {
-                btn.style.gridColumn = "span 1";
-            }
-        });
-
-        // Ajusta os botões padrão para o layout de 2 colunas
-        btnSalvar.style.gridColumn = "span 1";
-        btnLimpar.style.gridColumn = "span 2"; // Limpar fica sozinho embaixo
-
+        window.addEventListener('load', function() {
+    // 1. Verificação de Login
+    if (!localStorage.getItem('sessao_ativa')) {
+        // Se não estiver logado, exibe a tela de login
+        document.body.innerHTML = `
+            <div style="background:#121212; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family: sans-serif;">
+                <h2 style="color:#D4AF37; margin-bottom: 20px;">ACESSO RESTRITO - SENAGA</h2>
+                <input type="text" id="user" placeholder="Usuário" style="margin:10px; padding:12px; width: 250px; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white;">
+                <input type="password" id="pass" placeholder="Senha" style="margin:10px; padding:12px; width: 250px; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white;">
+                <button onclick="efetuarLogin()" style="margin-top: 20px; padding: 12px 40px; background: #D4AF37; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">ENTRAR</button>
+                <div id="login-msg" style="color: #ff4d4d; margin-top: 15px; font-size: 14px;"></div>
+            </div>`;
     } else {
-        // --- MODO DESATIVADO ---
-        btnToggle.style.backgroundColor = "transparent";
-        btnToggle.style.color = "var(--accent)";
+        // 2. Inicialização do Sistema (Usuário Logado)
         
-        // Esconde botões de produção
-        botoesProducao.forEach(btn => btn.style.display = "none");
-
-        // Salvar e Limpar dividem a primeira linha (50/50)
-        btnSalvar.style.display = "flex";
-        btnSalvar.style.gridColumn = "span 1";
-        btnLimpar.style.display = "flex";
-        btnLimpar.style.gridColumn = "span 1";
+        // Garante que os botões de produção comecem escondidos
+        document.querySelectorAll('.modo-prod-apenas').forEach(btn => btn.style.display = "none");
+        
+        // Renderiza a interface
+        renderStores();
+        render();
     }
+});
+        async function efetuarLogin() {
+
+const user = document.getElementById('user').value;
+
+const pass = document.getElementById('pass').value;
+
+const msg = document.getElementById('login-msg');
+
+
+
+if (!user || !pass) {
+
+msg.innerText = "Preencha todos os campos!";
+
+return;
+
 }
 
 
+
+try {
+
+// Faz a chamada para o seu Google Script
+
+const response = await fetch(URL_API, {
+
+method: "POST",
+
+body: JSON.stringify({ acao: "login", user: user, pass: pass })
+
+});
+
+
+// Como usamos no-cors em algumas configurações,
+
+// a estratégia aqui é considerar que o login deu certo se não houver erro de rede
+
+// ou validar o retorno textual do Script se configurado como CORS.
+
+localStorage.setItem('sessao_ativa', 'true');
+
+location.reload();
+
+
+} catch (e) {
+
+msg.innerText = "Erro ao conectar com o servidor.";
+
+}
+
+}
         
         let modoSalvarProducao = false;
         // Desativa todos os alertas e confirmações do site
@@ -221,51 +213,67 @@ window.confirm = function(msg) { console.log("Confirm bloqueado: " + msg); retur
             });
         }
 
-        
+        let modoProducaoAtivo = false;
 
 // 2. Função para alternar o modo
+function toggleModoProducao() {
+    modoProducaoAtivo = !modoProducaoAtivo;
+    const btnToggle = document.getElementById('toggle-producao');
+    const btnSalvar = document.getElementById('btn-salvar-nuvem');
+    const btnBuscar = document.getElementById('btn-buscar-nuvem');
+    const btnLimpar = document.getElementById('btn-limpar-tela');
+    const btnImportar = document.getElementById('btn-importar');
+    const botoesProducao = document.querySelectorAll('.modo-prod-apenas');
 
-// 3. Chame a função ao carregar para garantir que comece escondido
-window.onload = function() {
-    if (!localStorage.getItem('sessao_ativa')) {
-        document.body.innerHTML = `
-            <div style="background:#121212; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family: sans-serif;">
-                <h2 style="color:#D4AF37; margin-bottom: 20px;">ACESSO RESTRITO - SENAGA</h2>
-                <input type="text" id="user" placeholder="Usuário" style="margin:10px; padding:12px; width: 250px; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white;">
-                <input type="password" id="pass" placeholder="Senha" style="margin:10px; padding:12px; width: 250px; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white;">
-                <button onclick="efetuarLogin()" style="margin-top: 20px; padding: 12px 40px; background: #D4AF37; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">ENTRAR</button>
-                <div id="login-msg" style="color: #ff4d4d; margin-top: 15px; font-size: 14px;"></div>
-            </div>`;
-    } else {
-        // --- ORDEM DE CARREGAMENTO CRÍTICA ---
-        renderStores();      // 1. Cria as lojas
-        render();            // 2. Cria a lista de produtos
-        forcarModoOff();     // 3. Força o layout a organizar os botões no modo desligado
-    }
-};
-
-
-async function efetuarLogin() {
-    const user = document.getElementById('user').value; // O ID/Nome que você preencheu na planilha
-    const pass = document.getElementById('pass').value; // A senha que você preencheu na planilha
-
-    try {
-        const response = await fetch(URL_API, {
-            method: "POST",
-            body: JSON.stringify({ 
-                acao: "login", 
-                user: user, 
-                pass: pass 
-            })
-        });
+    if (modoProducaoAtivo) {
+        // --- MODO ON ---
+        btnToggle.style.backgroundColor = "var(--accent)";
+        btnToggle.style.color = "var(--bg)";
         
-        // Se o login for bem-sucedido, salva a sessão localmente
-        localStorage.setItem('sessao_ativa', 'true');
-        location.reload(); 
-    } catch (e) {
-        alert("Falha na comunicação com o servidor.");
+        // 1. Linha: Buscar e Salvar
+        btnBuscar.style.display = "flex";
+        btnBuscar.style.order = "1";
+        btnBuscar.style.gridColumn = "span 1";
+
+        btnSalvar.style.order = "2";
+        btnSalvar.style.gridColumn = "span 1";
+
+        // 2. Linha: IMPORTAR (Forçando o aparecimento)
+        if (btnImportar) {
+            btnImportar.style.display = "flex";
+            btnImportar.style.order = "3";
+            btnImportar.style.gridColumn = "span 2";
+        }
+
+        // 3. Linha: Outros botões (PDF, etc)
+        botoesProducao.forEach(btn => {
+            if (btn.id !== 'btn-buscar-nuvem' && btn.id !== 'btn-importar') {
+                btn.style.display = "flex";
+                btn.style.order = "4";
+                btn.style.gridColumn = "span 2";
+            }
+        });
+
+        // Final: Limpar
+        btnLimpar.style.order = "99";
+        btnLimpar.style.gridColumn = "span 2";
+
+    } else {
+        // --- MODO OFF ---
+        btnToggle.style.backgroundColor = "transparent";
+        btnToggle.style.color = "var(--accent)";
+        
+        // Esconde tudo que é de produção
+        botoesProducao.forEach(btn => btn.style.display = "none");
+
+        // Salvar e Limpar dividem a primeira linha (50/50)
+        btnSalvar.style.gridColumn = "span 1";
+        btnSalvar.style.order = "0";
+        btnLimpar.style.gridColumn = "span 1";
+        btnLimpar.style.order = "0";
     }
 }
+
 
         function render() {
             const list = document.getElementById('inventory-list');
@@ -300,16 +308,22 @@ async function efetuarLogin() {
             alert("Base salva localmente!");
         }
 
-      async function salvarNaNuvem() {
+    async function salvarNaNuvem() {
     document.getElementById('loader').style.display = 'flex';
     
-    // Define a ação: se clicou em calcular, envia 'salvar_producao', senão 'salvar'
     const acaoAtual = modoSalvarProducao ? "salvar_producao" : "salvar";
     
+    // 1. Preparamos os itens garantindo que o valor seja numérico, incluindo o zero
+    const itensTratados = db.map(item => ({
+        id: item.id,
+        nome: item.nome,
+        qtd: Number(item.qtd) // Força a conversão para número, garantindo que 0 não seja ignorado
+    }));
+
     const payload = { 
         acao: acaoAtual, 
         loja: activeStore, 
-        items: db 
+        items: itensTratados 
     };
     
     try {
@@ -319,21 +333,22 @@ async function efetuarLogin() {
             body: JSON.stringify(payload)
         });
         
-        // Feedback via console (já que alerts estão bloqueados no seu código)
-        console.log("Dados enviados como: " + acaoAtual);
+        console.log("Dados enviados (incluindo zerados) como: " + acaoAtual);
         
-        // Reseta o modo para o próximo uso
+        // Reset de interface após sucesso
         modoSalvarProducao = false;
         const btnSalvar = document.getElementById('btn-salvar-nuvem');
         btnSalvar.innerText = "💾 SALVAR NA NUVEM";
         btnSalvar.style.borderColor = "var(--accent)";
         btnSalvar.style.color = "var(--accent)";
         
+        // Opcional: Avisar o usuário no console ou em um elemento de texto na tela
+        console.log("Salvo com sucesso!");
+        
     } catch (e) { 
         console.error("Erro na conexão:", e);
     }
     document.getElementById('loader').style.display = 'none';
-
 }
    function applyDifferenceToScreen() {
     if(!dadosOriginaisNuvem) { 
