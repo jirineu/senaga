@@ -101,60 +101,46 @@ let modoProducaoAtivo = false;
 function toggleModoProducao() {
     modoProducaoAtivo = !modoProducaoAtivo;
     const btnToggle = document.getElementById('toggle-producao');
-    const btnSalvar = document.getElementById('btn-salvar-nuvem');
-    const btnBuscar = document.getElementById('btn-buscar-nuvem');
-    const btnLimpar = document.getElementById('btn-limpar-tela');
-    const btnImportar = document.getElementById('btn-importar');
     const botoesProducao = document.querySelectorAll('.modo-prod-apenas');
+    const btnSalvar = document.getElementById('btn-salvar-nuvem');
+    const btnLimpar = document.getElementById('btn-limpar-tela');
 
     if (modoProducaoAtivo) {
-        // --- MODO ON ---
+        // --- MODO ATIVADO ---
         btnToggle.style.backgroundColor = "var(--accent)";
         btnToggle.style.color = "var(--bg)";
         
-        // 1. Linha: Buscar e Salvar
-        btnBuscar.style.display = "flex";
-        btnBuscar.style.order = "1";
-        btnBuscar.style.gridColumn = "span 1";
-
-        btnSalvar.style.order = "2";
-        btnSalvar.style.gridColumn = "span 1";
-
-        // 2. Linha: IMPORTAR (Forçando o aparecimento)
-        if (btnImportar) {
-            btnImportar.style.display = "flex";
-            btnImportar.style.order = "3";
-            btnImportar.style.gridColumn = "span 2";
-        }
-
-        // 3. Linha: Outros botões (PDF, etc)
+        // Mostra todos os botões de produção
         botoesProducao.forEach(btn => {
-            if (btn.id !== 'btn-buscar-nuvem' && btn.id !== 'btn-importar') {
-                btn.style.display = "flex";
-                btn.style.order = "4";
+            btn.style.display = "flex";
+            // Se for o botão de Importar, PDF ou Calcular, ocupa a linha toda
+            if (btn.id === 'btn-importar' || btn.classList.contains('btn-calc')) {
                 btn.style.gridColumn = "span 2";
+            } else {
+                btn.style.gridColumn = "span 1";
             }
         });
 
-        // Final: Limpar
-        btnLimpar.style.order = "99";
-        btnLimpar.style.gridColumn = "span 2";
+        // Ajusta os botões padrão para o layout de 2 colunas
+        btnSalvar.style.gridColumn = "span 1";
+        btnLimpar.style.gridColumn = "span 2"; // Limpar fica sozinho embaixo
 
     } else {
-        // --- MODO OFF ---
+        // --- MODO DESATIVADO ---
         btnToggle.style.backgroundColor = "transparent";
         btnToggle.style.color = "var(--accent)";
         
-        // Esconde tudo que é de produção
+        // Esconde botões de produção
         botoesProducao.forEach(btn => btn.style.display = "none");
 
         // Salvar e Limpar dividem a primeira linha (50/50)
+        btnSalvar.style.display = "flex";
         btnSalvar.style.gridColumn = "span 1";
-        btnSalvar.style.order = "0";
+        btnLimpar.style.display = "flex";
         btnLimpar.style.gridColumn = "span 1";
-        btnLimpar.style.order = "0";
     }
 }
+
 
         
         let modoSalvarProducao = false;
