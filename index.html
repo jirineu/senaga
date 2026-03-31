@@ -36,14 +36,30 @@
         .store-btn.active { border-color: var(--accent); color: var(--accent); background: #2a2410; }
         .add-store { background: var(--accent); color: var(--bg); font-weight: bold; width: 35px; }
 
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .controls { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 6px; /* Diminuído de 10px para 6px */
+    margin-bottom: 15px; 
+}
         
-        .btn {
-            background: transparent; border: 1px solid var(--accent); color: var(--accent);
-            padding: 10px 5px; border-radius: 5px; font-weight: bold; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; font-size: 0.75rem; text-align: center;
-            height: 55px; text-transform: uppercase;
-        }
+      .btn {
+    background: transparent; 
+    border: 1px solid var(--accent); 
+    color: var(--accent);
+    padding: 5px 2px; /* Diminuído o padding vertical */
+    border-radius: 5px; 
+    font-weight: bold; 
+    cursor: pointer;
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-size: 0.65rem; /* Fonte menor para caber mais texto */
+    text-align: center;
+    height: 40px; /* Reduzido de 55px para 40px */
+    text-transform: uppercase;
+    line-height: 1.1; /* Melhora o alinhamento de textos com duas linhas */
+}
         .btn:disabled { border-color: #444; color: #444; cursor: not-allowed; }
         .btn-prod { border-color: var(--diff); color: var(--diff); grid-column: span 2; }
         
