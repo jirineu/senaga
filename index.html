@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salgados Express - Gestão</title>
+    <title>Salgados Express - Ordem de Produção</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root { --bg: #121212; --card: #1e1e1e; --accent: #D4AF37; --text: #ffffff; --border: #333; --diff: #2ecc71; }
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
@@ -15,15 +14,11 @@
         
         .store-selector { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; justify-content: center; }
         .store-btn { 
-            padding: 5px 10px; border: 1px solid #444; background: #222; color: #888; 
-            border-radius: 4px; cursor: pointer; font-size: 0.7rem; text-transform: uppercase;
+            padding: 8px 12px; border: 1px solid #444; background: #222; color: #888; 
+            border-radius: 4px; cursor: pointer; font-size: 0.75rem; text-transform: uppercase;
         }
         .store-btn.active { border-color: var(--accent); color: var(--accent); background: #2a2410; }
-        /* ESTILO PARA O BOTÃO PRODUÇÃO */
-        .store-btn.mode-prod-btn { border-color: var(--diff); color: var(--diff); }
-        .store-btn.mode-prod-btn.active { background: #1a2e21; }
-        
-        .add-store { background: var(--accent); color: var(--bg); font-weight: bold; width: 30px; }
+        .add-store { background: var(--accent); color: var(--bg); font-weight: bold; width: 35px; }
 
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
         
@@ -33,50 +28,81 @@
             display: flex; align-items: center; justify-content: center; font-size: 0.75rem; text-align: center;
             height: 55px; text-transform: uppercase;
         }
-        .btn:active { background: var(--accent); color: var(--bg); }
-        .btn-calc { border-color: var(--diff); color: var(--diff); }
+        .btn:disabled { border-color: #444; color: #444; cursor: not-allowed; }
+        .btn-prod { border-color: var(--diff); color: var(--diff); grid-column: span 2; }
         
         #inventory-list { display: grid; gap: 8px; }
         .item-card { background: var(--card); border-left: 4px solid var(--border); padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; }
         .item-card.active { border-left-color: var(--accent); }
         
         .qty-controls { display: flex; align-items: center; gap: 8px; }
-        .qty-btn { width: 40px; height: 40px; border-radius: 5px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 1.3rem; display: flex; align-items: center; justify-content: center; }
+        .qty-btn { width: 40px; height: 40px; border-radius: 5px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 1.3rem; }
         .qty-input { width: 45px; text-align: center; background: transparent; border: none; color: white; font-size: 1rem; font-weight: bold; }
         
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .modal-content { background: var(--card); padding: 20px; border-radius: 8px; border: 1px solid var(--accent); width: 100%; max-width: 400px; }
+        .modal h2 { color: var(--accent); margin-bottom: 15px; font-size: 1.1rem; text-align: center; }
+        .check-item { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 1rem; }
+        .check-item input { width: 20px; height: 20px; accent-color: var(--accent); }
+
         .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
-        input[type="file"] { display: none; }
-        .info-msg { font-size: 0.7rem; color: #aaa; grid-column: span 2; text-align: center; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-    <header><h1>Estoque de Salgados</h1></header>
-
+<div style="padding: 15px;">
+<h1>Gestão de Produção</h1>
+<button id="toggle-producao" onclick="toggleModoProducao()" 
+        style="position: absolute; top: 8px; right: 8px; 
+               padding: 5px 10px; font-size: 11px; 
+               opacity: 0.8;
+               background: transparent; border: 1.5px solid var(--accent); 
+               color: var(--accent); border-radius: 4px; cursor: pointer;
+               line-height: 1; min-width: auto; height: auto;
+               text-transform: uppercase; font-weight: bold;
+               letter-spacing: 1px; transition: 0.3s;">
+        PROD
+    </button>
+   </div>
     <div class="store-selector" id="store-container"></div>
 
-    <div class="controls">
-        <label class="btn" for="doc-import">📥 IMPORTAR PDF</label>
-        <input type="file" id="doc-import" accept=".pdf,application/pdf">
-        
-        <button class="btn" onclick="exportPDF()">📄 GERAR PDF</button>
+  <div class="controls" id="controls-container">
+    <button id="btn-buscar-nuvem" class="btn modo-prod-apenas" onclick="buscarDaNuvem()">🔍 BUSCAR DA NUVEM</button>
+    
+    <button id="btn-salvar-nuvem" class="btn" onclick="salvarNaNuvem()">💾 SALVAR NA NUVEM</button>
+    
+    <button id="btn-limpar-tela" class="btn" onclick="clearData()" style="border-color: #666; color: #666;">🧹 LIMPAR TELA</button>
 
-        <button class="btn" onclick="saveAsBase()">💾 SALVAR BASE</button>
-        <button class="btn btn-calc" onclick="applyDifferenceToScreen()">🧮 CALCULAR DIFERENÇA</button>
-
-        <button class="btn" onclick="clearData()" style="border-color: #666; color: #666; grid-column: span 2; height: 40px;">LIMPAR TUDO</button>
-        
-        <div class="info-msg" id="status-msg">O PDF Produção ocultará itens zerados automaticamente.</div>
-    </div>
-
+    <button id="btn-importar" class="btn btn-prod modo-prod-apenas" onclick="abrirImportacaoProducao()">
+        📥 IMPORTAR PRODUÇÃO (NUVEM)
+    </button>
+    
+    <button class="btn btn-calc modo-prod-apenas" style="grid-column: span 2;" onclick="gerarPdfDaTela()">📄 GERAR PDF</button>
+    <button class="btn btn-calc modo-prod-apenas" style="grid-column: span 2;" onclick="applyDifferenceToScreen()">🧮 CALCULAR DIFERENÇA</button>
+</div>
     <div id="inventory-list"></div>
+
+    <div class="modal" id="modal-producao">
+        <div class="modal-content">
+            <h2>Selecionar Lojas para PDF</h2>
+            <div id="lista-lojas-modal"></div>
+            <button class="btn btn-prod" style="margin-top: 15px; height: 45px;" onclick="gerarOrdemUnificada()">GERAR PDF UNIFICADO</button>
+            <button class="btn" style="margin-top: 10px; height: 40px; border-color: #666; color: #666;" onclick="fecharModal()">CANCELAR</button>
+        </div>
+    </div>
 
     <div class="loading-overlay" id="loader">
         <div style="color: var(--accent); margin-bottom: 10px;">Processando dados...</div>
     </div>
 
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        
+        let modoSalvarProducao = false;
+        // Desativa todos os alertas e confirmações do site
+window.alert = function(msg) { console.log("Alert bloqueado: " + msg); };
+window.confirm = function(msg) { console.log("Confirm bloqueado: " + msg); return true; };
+        const URL_API = "https://script.google.com/macros/s/AKfycbxPxnJDYGsBKjOKf7Q5MuqAZ0jHwPFAINfVmJJ7mWeUfWIiFnvIpKVbt85r7whCkjzh/exec";
 
         const DATA_BASE = [
             { id: 1, nome: "Atum" }, { id: 2, nome: "Berinjela" }, { id: 3, nome: "Brasileiro" },
@@ -98,51 +124,123 @@
 
         let stores = JSON.parse(localStorage.getItem('stores_list')) || ["Vila Prudente", "Interlagos", "São Bernardo Max"];
         let activeStore = localStorage.getItem('active_store') || stores[0];
-        let isModeProducao = localStorage.getItem('mode_producao') === 'true';
-
         let db = JSON.parse(localStorage.getItem('salgados_db_v3')) || DATA_BASE.map(item => ({ ...item, qtd: 0 }));
-        let isCalculated = false; 
+        let diffCalculated = false;
+        let modoSalvarComoProducao = false; // Nova variável para controlar o destino
 
         function renderStores() {
             const container = document.getElementById('store-container');
             container.innerHTML = '';
             stores.forEach(name => {
                 const btn = document.createElement('button');
-                btn.className = `store-btn ${(!isModeProducao && activeStore === name) ? 'active' : ''}`;
+                btn.className = `store-btn ${activeStore === name ? 'active' : ''}`;
                 btn.innerText = name;
-                btn.onclick = () => {
-                    activeStore = name;
-                    isModeProducao = false;
-                    localStorage.setItem('active_store', name);
-                    localStorage.setItem('mode_producao', 'false');
-                    renderStores();
-                };
+                btn.onclick = () => { activeStore = name; localStorage.setItem('active_store', name); renderStores(); render(); };
                 container.appendChild(btn);
             });
-            const addBtn = document.createElement('button');
-            addBtn.className = 'store-btn add-store';
-            addBtn.innerText = '+';
-            addBtn.onclick = () => {
-                const name = prompt("Nome da nova loja:");
-                if(name && !stores.includes(name)) {
-                    stores.push(name);
-                    localStorage.setItem('stores_list', JSON.stringify(stores));
-                    renderStores();
-                }
-            };
-            container.appendChild(addBtn);
-
-            // NOVO BOTÃO MODO PRODUÇÃO
-            const prodBtn = document.createElement('button');
-            prodBtn.className = `store-btn mode-prod-btn ${isModeProducao ? 'active' : ''}`;
-            prodBtn.innerText = 'MODO PRODUÇÃO';
-            prodBtn.onclick = () => {
-                isModeProducao = true;
-                localStorage.setItem('mode_producao', 'true');
-                renderStores();
-            };
-            container.appendChild(prodBtn);
         }
+
+        let modoProducaoAtivo = false;
+
+// 2. Função para alternar o modo
+function toggleModoProducao() {
+    modoProducaoAtivo = !modoProducaoAtivo;
+    const btnToggle = document.getElementById('toggle-producao');
+    const btnSalvar = document.getElementById('btn-salvar-nuvem');
+    const btnBuscar = document.getElementById('btn-buscar-nuvem');
+    const btnLimpar = document.getElementById('btn-limpar-tela');
+    const btnImportar = document.getElementById('btn-importar');
+    const botoesProducao = document.querySelectorAll('.modo-prod-apenas');
+
+    if (modoProducaoAtivo) {
+        // --- MODO ON ---
+        btnToggle.style.backgroundColor = "var(--accent)";
+        btnToggle.style.color = "var(--bg)";
+        
+        // 1. Linha: Buscar e Salvar
+        btnBuscar.style.display = "flex";
+        btnBuscar.style.order = "1";
+        btnBuscar.style.gridColumn = "span 1";
+
+        btnSalvar.style.order = "2";
+        btnSalvar.style.gridColumn = "span 1";
+
+        // 2. Linha: IMPORTAR (Forçando o aparecimento)
+        if (btnImportar) {
+            btnImportar.style.display = "flex";
+            btnImportar.style.order = "3";
+            btnImportar.style.gridColumn = "span 2";
+        }
+
+        // 3. Linha: Outros botões (PDF, etc)
+        botoesProducao.forEach(btn => {
+            if (btn.id !== 'btn-buscar-nuvem' && btn.id !== 'btn-importar') {
+                btn.style.display = "flex";
+                btn.style.order = "4";
+                btn.style.gridColumn = "span 2";
+            }
+        });
+
+        // Final: Limpar
+        btnLimpar.style.order = "99";
+        btnLimpar.style.gridColumn = "span 2";
+
+    } else {
+        // --- MODO OFF ---
+        btnToggle.style.backgroundColor = "transparent";
+        btnToggle.style.color = "var(--accent)";
+        
+        // Esconde tudo que é de produção
+        botoesProducao.forEach(btn => btn.style.display = "none");
+
+        // Salvar e Limpar dividem a primeira linha (50/50)
+        btnSalvar.style.gridColumn = "span 1";
+        btnSalvar.style.order = "0";
+        btnLimpar.style.gridColumn = "span 1";
+        btnLimpar.style.order = "0";
+    }
+}
+// 3. Chame a função ao carregar para garantir que comece escondido
+window.onload = function() {
+    // 1. Verifica se o usuário já está logado
+    if (!localStorage.getItem('sessao_ativa')) {
+        // Se não estiver, substitui todo o corpo da página pela tela de login
+        document.body.innerHTML = `
+            <div style="background:#121212; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family: sans-serif;">
+                <h2 style="color:#D4AF37; margin-bottom: 20px;">ACESSO RESTRITO - SENAGA</h2>
+                <input type="text" id="user" placeholder="Usuário" style="margin:10px; padding:12px; width: 250px; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white;">
+                <input type="password" id="pass" placeholder="Senha" style="margin:10px; padding:12px; width: 250px; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white;">
+                <button onclick="efetuarLogin()" style="margin-top: 20px; padding: 12px 40px; background: #D4AF37; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">ENTRAR</button>
+                <div id="login-msg" style="color: #ff4d4d; margin-top: 15px; font-size: 14px;"></div>
+            </div>`;
+    } else {
+        // Se já estiver logado, carrega o sistema normalmente
+        renderStores();
+        render();
+    }
+};
+
+async function efetuarLogin() {
+    const user = document.getElementById('user').value; // O ID/Nome que você preencheu na planilha
+    const pass = document.getElementById('pass').value; // A senha que você preencheu na planilha
+
+    try {
+        const response = await fetch(URL_API, {
+            method: "POST",
+            body: JSON.stringify({ 
+                acao: "login", 
+                user: user, 
+                pass: pass 
+            })
+        });
+        
+        // Se o login for bem-sucedido, salva a sessão localmente
+        localStorage.setItem('sessao_ativa', 'true');
+        location.reload(); 
+    } catch (e) {
+        alert("Falha na comunicação com o servidor.");
+    }
+}
 
         function render() {
             const list = document.getElementById('inventory-list');
@@ -160,6 +258,7 @@
                 list.appendChild(div);
             });
             localStorage.setItem('salgados_db_v3', JSON.stringify(db));
+            document.getElementById('btn-ordem').disabled = !diffCalculated;
         }
 
         function upd(id, v) { 
@@ -173,95 +272,249 @@
 
         function saveAsBase() {
             localStorage.setItem('last_pdf_base', JSON.stringify(db));
-            isCalculated = true; 
-            document.getElementById('status-msg').innerText = `✅ Base salva. PDF será gerado como Produção.`;
-            alert("Valores salvos como Base!");
+            alert("Base salva localmente!");
         }
 
-        function applyDifferenceToScreen() {
-            const baseStr = localStorage.getItem('last_pdf_base');
-            if(!baseStr) { alert("Clique em SALVAR BASE primeiro."); return; }
-            const baseData = JSON.parse(baseStr);
-            db = db.map(item => {
-                const baseItem = baseData.find(b => b.id === item.id);
-                const valorBase = baseItem ? (parseInt(baseItem.qtd) || 0) : 0;
-                return { ...item, qtd: (parseInt(item.qtd) || 0) - valorBase };
+      async function salvarNaNuvem() {
+    document.getElementById('loader').style.display = 'flex';
+    
+    // Define a ação: se clicou em calcular, envia 'salvar_producao', senão 'salvar'
+    const acaoAtual = modoSalvarProducao ? "salvar_producao" : "salvar";
+    
+    const payload = { 
+        acao: acaoAtual, 
+        loja: activeStore, 
+        items: db 
+    };
+    
+    try {
+        await fetch(URL_API, {
+            method: "POST",
+            mode: "no-cors", 
+            body: JSON.stringify(payload)
+        });
+        
+        // Feedback via console (já que alerts estão bloqueados no seu código)
+        console.log("Dados enviados como: " + acaoAtual);
+        
+        // Reseta o modo para o próximo uso
+        modoSalvarProducao = false;
+        const btnSalvar = document.getElementById('btn-salvar-nuvem');
+        btnSalvar.innerText = "💾 SALVAR NA NUVEM";
+        btnSalvar.style.borderColor = "var(--accent)";
+        btnSalvar.style.color = "var(--accent)";
+        
+    } catch (e) { 
+        console.error("Erro na conexão:", e);
+    }
+    document.getElementById('loader').style.display = 'none';
+
+}
+   function applyDifferenceToScreen() {
+    if(!dadosOriginaisNuvem) { 
+        alert("Busque da nuvem primeiro!"); 
+        return; 
+    }
+
+    db = db.map(itemTela => {
+        const itemBase = dadosOriginaisNuvem.find(b => b.id === itemTela.id);
+        const qtdBase = itemBase ? (parseInt(itemBase.qtd) || 0) : 0;
+        const qtdAtual = parseInt(itemTela.qtd) || 0;
+        return { ...itemTela, qtd: qtdAtual - qtdBase };
+    });
+
+    diffCalculated = true;
+    modoSalvarProducao = true; // ATIVA O MODO PRODUÇÃO
+    render();
+    
+    // Altera visualmente o botão de salvar para dar feedback ao usuário
+    const btnSalvar = document.getElementById('btn-salvar-nuvem');
+    btnSalvar.innerText = "💾 SALVAR PRODUÇÃO";
+    btnSalvar.style.borderColor = "var(--diff)";
+    btnSalvar.style.color = "var(--diff)";
+}
+async function salvarProducao() {
+    const loader = document.getElementById('loader');
+    loader.style.display = 'flex';
+    
+    const payload = { 
+        acao: "salvar_producao", 
+        loja: activeStore, 
+        items: db // Aqui 'db' já contém os valores subtraídos (a diferença)
+    };
+    
+    try {
+        await fetch(URL_API, {
+            method: "POST",
+            mode: "no-cors", // Crucial para rodar do PC
+            body: JSON.stringify(payload)
+        });
+        alert("Produção enviada! Verifique a aba '" + activeStore + "' colunas E, F, G.");
+    } catch (e) {
+        alert("Erro técnico: " + e.message);
+    }
+    loader.style.display = 'none';
+}
+
+     let dadosOriginaisNuvem = null;
+
+async function buscarDaNuvem() {
+    document.getElementById('loader').style.display = 'flex';
+    try {
+        // Busca os dados da aba específica da loja
+        const response = await fetch(`${URL_API}?loja=${encodeURIComponent(activeStore)}`);
+        const dadosLoja = await response.json();
+        
+        if (dadosLoja && dadosLoja.length > 0) {
+            // 1. Armazena uma cópia oculta para servir de BASE para o cálculo de diferença
+            dadosOriginaisNuvem = JSON.parse(JSON.stringify(dadosLoja));
+            
+            // 2. Preenche o banco de dados da tela (db) para edição
+            db = DATA_BASE.map(itemBase => {
+                const itemNuvem = dadosLoja.find(n => n.id === itemBase.id);
+                return { ...itemBase, qtd: itemNuvem ? itemNuvem.qtd : 0 };
             });
-            isCalculated = true; 
+            
+            diffCalculated = false; // Reseta o estado do botão de PDF
             render();
+            alert(`Dados de ${activeStore} carregados! Agora você pode editar e calcular a diferença.`);
+        } else {
+            alert("Aba vazia ou loja não encontrada. Preencha os dados e salve primeiro.");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao buscar dados. Verifique a conexão.");
+    }
+    document.getElementById('loader').style.display = 'none';
+}
+        function abrirSelecaoProducao() {
+            const modal = document.getElementById('modal-producao');
+            const lista = document.getElementById('lista-lojas-modal');
+            lista.innerHTML = '';
+            stores.forEach(loja => {
+                lista.innerHTML += `<label class="check-item"><input type="checkbox" value="${loja}" checked> ${loja}</label>`;
+            });
+            modal.style.display = 'flex';
         }
 
-        function clearData() { 
-            if(confirm('Limpar tudo?')) { 
+        function fecharModal() { document.getElementById('modal-producao').style.display = 'none'; }
+
+       async function importarProducaoConsolidada() {
+    const selecionadas = Array.from(document.querySelectorAll('#lista-lojas-modal input:checked')).map(cb => cb.value);
+    
+    if (selecionadas.length === 0) return alert("Selecione ao menos uma loja.");
+    
+    document.getElementById('loader').style.display = 'flex';
+    fecharModal();
+
+    // Criamos um novo banco zerado para receber as somas
+    let consolidadoLocal = DATA_BASE.map(item => ({ ...item, qtd: 0 }));
+
+    try {
+        // Fazemos um loop para buscar os dados de cada loja selecionada
+        for (const loja of selecionadas) {
+            const nomeAba = `${loja} - Produção`;
+            const response = await fetch(`${URL_API}?loja=${encodeURIComponent(nomeAba)}`);
+            const dadosLoja = await response.json();
+
+            if (dadosLoja && dadosLoja.length > 0) {
+                dadosLoja.forEach(itemNuvem => {
+                    // Encontra o item correspondente no nosso consolidado e soma a quantidade
+                    const itemNoDB = consolidadoLocal.find(i => i.id == itemNuvem.id);
+                    if (itemNoDB) {
+                        itemNoDB.qtd += (parseInt(itemNuvem.qtd) || 0);
+                    }
+                });
+            }
+        }
+
+        // Atualiza a variável global 'db' com os novos valores somados
+        db = consolidadoLocal;
+        
+        // Atualiza a tela para o usuário ver os valores
+        render();
+        
+        alert("Produções importadas e somadas na tela com sucesso!");
+
+    } catch (e) {
+        console.error("Erro na importação:", e);
+        alert("Erro ao buscar dados na nuvem. Verifique se as abas de produção existem.");
+    } finally {
+        document.getElementById('loader').style.display = 'none';
+    }
+}
+
+function abrirImportacaoProducao() {
+    const modal = document.getElementById('modal-producao');
+    const lista = document.getElementById('lista-lojas-modal');
+    lista.innerHTML = '';
+    
+    stores.forEach(loja => {
+        lista.innerHTML += `
+            <label class="check-item">
+                <input type="checkbox" value="${loja}" checked> ${loja}
+            </label>`;
+    });
+    
+    // Configura o botão do modal para disparar a nova função de importação
+    const btnConfirmar = modal.querySelector('.btn-prod');
+    btnConfirmar.innerText = "IMPORTAR E SOMAR";
+    btnConfirmar.onclick = importarProducaoConsolidada; // <--- Referência à nova função
+    
+    modal.style.display = 'flex';
+}
+
+function gerarPdfDaTela() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    // Estética Dark Gold
+    doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F');
+    doc.setTextColor(212, 175, 55); doc.setFontSize(16);
+    doc.text("ORDEM DE PRODUÇÃO SENAGA", 105, 20, { align: 'center' });
+    
+    doc.setFontSize(10); doc.setTextColor(255, 255, 255);
+    let y = 35;
+    
+    db.forEach(item => {
+        if(item.qtd > 0) {
+            // Nome na esquerda (x: 80) e Quantidade logo após (x: 130)
+            // Ajuste esses dois números se quiser ainda mais perto ou longe
+            doc.text(`${item.nome}:`, 55, y); 
+            doc.text(String(item.qtd), 150, y);
+            
+            y += 8;
+            if(y > 280) { 
+                doc.addPage(); y = 20; 
+                doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F'); 
+                doc.setTextColor(255, 255, 255); // Garante que o texto continue branco na nova página
+            }
+        }
+    });
+    
+    doc.save(`Producao_Final_${new Date().getTime()}.pdf`);
+}
+       function clearData() { 
+            if(confirm('Isso limpará apenas a tela atual. Os dados na nuvem só serão alterados quando você clicar em SALVAR. Confirmar?')) { 
+                // Reseta o banco de dados local para zero
                 db = DATA_BASE.map(item => ({ ...item, qtd: 0 }));
-                isCalculated = false;
-                localStorage.removeItem('salgados_db_v3');
-                render(); 
+                
+                // Reseta o estado da diferença calculada
+                diffCalculated = false;
+                
+                // Atualiza o LocalStorage com os valores zerados
+                localStorage.setItem('salgados_db_v3', JSON.stringify(db));
+                
+                // Re-renderiza a tela
+                render();
+                
+                console.log("Interface limpa. Dados na nuvem permanecem intactos até o próximo salvamento.");
             } 
         }
 
-        async function handleFile(file) {
-            if(!file) return;
-            document.getElementById('loader').style.display = 'flex';
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                const page = await pdf.getPage(1);
-                const textContent = await page.getTextContent();
-                const fullText = textContent.items.map(item => item.str).join(" ").toLowerCase();
-                const sortedSearch = [...DATA_BASE].sort((a, b) => b.nome.length - a.nome.length);
-                sortedSearch.forEach(item => {
-                    const regex = new RegExp(item.nome.toLowerCase() + "\\s*(-?\\d+)", "i");
-                    const match = fullText.match(regex);
-                    if (match) {
-                        let localItem = db.find(i => i.id === item.id);
-                        if(localItem) localItem.qtd += parseInt(match[1]);
-                    }
-                });
-            } catch (e) { alert("Erro ao ler PDF."); }
-            document.getElementById('loader').style.display = 'none';
-            render();
-        }
-
-        async function exportPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            let y = 20;
-
-            let nomeArquivo = "";
-            let tituloLabel = "";
-
-            if (isModeProducao) {
-                nomeArquivo = "producao.pdf";
-                tituloLabel = "PRODUÇÃO UNIFICADA";
-            } else {
-                const lojaNome = activeStore.replace(/\s+/g, '_') || "Loja";
-                const tipo = isCalculated ? "producao" : "loja";
-                nomeArquivo = `${lojaNome}_${tipo}.pdf`;
-                tituloLabel = `${activeStore.toUpperCase()} - ${tipo.toUpperCase()}`;
-            }
-
-            doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F');
-            doc.setTextColor(212, 175, 55); doc.setFontSize(16);
-            doc.text(tituloLabel, 105, y, { align: 'center' });
-            
-            y += 15; doc.setFontSize(10); doc.setTextColor(255, 255, 255);
-            const itensParaImprimir = (isCalculated || isModeProducao) ? db.filter(item => item.qtd !== 0) : db;
-
-            itensParaImprimir.forEach(item => {
-                doc.text(`${item.nome}`, 20, y); 
-                doc.text(String(item.qtd), 180, y, { align: 'right' });
-                y += 8;
-                if(y > 280) { doc.addPage(); y = 20; doc.setFillColor(18, 18, 18); doc.rect(0, 0, 210, 297, 'F'); }
-            });
-            
-            doc.save(nomeArquivo);
-            if(isCalculated) isCalculated = false;
-        }
-
-        document.getElementById('doc-import').onchange = e => handleFile(e.target.files[0]);
         renderStores();
         render();
+
     </script>
 </body>
 </html>
